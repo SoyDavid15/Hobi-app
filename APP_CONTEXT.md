@@ -25,6 +25,11 @@ Para garantizar la seguridad de la aplicación y prevenir la filtración de dato
 
 ## 3. Registro de Cambios (Changelog)
 
+### [2026-08-16] - Retos Cortos y Fotografiables
+- **Autor:** IA (OpenCode)
+- **Cambios:**
+  - Actualización del prompt base en `Backend/ai.py`: los retos generados por Gemini ahora deben ser cortos, concretos y **fotografiables** (una acción visual que el usuario pueda demostrar tomándole una foto al completarla), para que puedan registrarse en la galería de retos completados del Perfil.
+
 ### [2026-08-16] - Retos Diarios Personalizados Según Hobbies del Usuario
 - **Autor:** IA (OpenCode)
 - **Cambios:**

@@ -112,8 +112,9 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     flexGrow: 1,
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     alignItems: 'center',
+    paddingTop: Spacing.four,
     paddingBottom: BottomTabInset + Spacing.five,
   },
   safeArea: {
@@ -122,11 +123,12 @@ const styles = StyleSheet.create({
     maxWidth: MaxContentWidth,
     paddingHorizontal: Spacing.four,
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.four,
+    justifyContent: 'flex-start',
+    gap: Spacing.three,
   },
   header: {
     alignItems: 'center',
+    marginTop: Spacing.two,
   },
   subGreeting: {
     fontSize: 16,
@@ -142,7 +144,7 @@ const styles = StyleSheet.create({
   characterContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: Spacing.two,
+    paddingVertical: Spacing.one,
   },
   characterImage: {
     width: 220,
@@ -153,7 +155,7 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
     width: '100%',
     paddingHorizontal: Spacing.four,
-    marginTop: Spacing.one,
+    marginTop: Spacing.two,
   },
   badge: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
