@@ -1,98 +1,190 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
+import { Platform, StyleSheet, ScrollView, View, Pressable, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useEffect, useState } from 'react';
+import { Image } from 'expo-image';
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
-
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
-  return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
-  );
-}
+import { BottomTabInset, MaxContentWidth, Spacing, BorderRadius } from '@/constants/theme';
+import { ChallengeService } from '@/services/challenges';
 
 export default function HomeScreen() {
+  const [completed, setCompleted] = useState(false);
+  const [challenge, setChallenge] = useState<string | null>(null);
+  const [challengeError, setChallengeError] = useState<string | null>(null);
+  const { width, height } = useWindowDimensions();
+
+  useEffect(() => {
+    let active = true;
+
+    const loadChallenge = async () => {
+      const { challenge, error } = await ChallengeService.getChallenge();
+      if (!active) return;
+      setChallenge(challenge);
+      setChallengeError(error);
+    };
+
+    loadChallenge();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
-          </ThemedText>
-        </ThemedView>
+    <View style={styles.container}>
+      {/* Círculo gigante café en la inferior del fondo (200% ancho horizontal, centrado, y mitad vertical) */}
+      <View
+        style={[
+          styles.bottomCircle,
+          {
+            width: width * 2,
+            left: '-50%',
+            height: height * 0.5,
+            borderTopLeftRadius: width,
+            borderTopRightRadius: width,
+          },
+        ]}
+      />
 
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}>
+        <SafeAreaView style={styles.safeArea}>
+          {/* Cabecera: Hola, soy Hobi */}
+          <View style={styles.header}>
+            <ThemedText style={styles.subGreeting}>Hola, soy</ThemedText>
+            <ThemedText style={styles.mainTitle}>Hobi</ThemedText>
+          </View>
 
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
+          {/* Personaje Hobi */}
+          <View style={styles.characterContainer}>
+            <Image
+              source={require('@/assets/images/hobiCharacter.png')}
+              style={styles.characterImage}
+              contentFit="contain"
+            />
+          </View>
 
-        {Platform.OS === 'web' && <WebBadge />}
-      </SafeAreaView>
-    </ThemedView>
+          {/* Reto Diario */}
+          <View style={styles.challengeSection}>
+            <View style={styles.badge}>
+              <ThemedText style={styles.badgeText}>Reto diario</ThemedText>
+            </View>
+            <ThemedText style={styles.challengeTitle}>
+              {challenge ?? (challengeError ? 'No pudimos cargar tu reto. Intenta de nuevo.' : 'Cargando tu reto...')}
+            </ThemedText>
+
+            <Pressable
+              style={({ pressed }) => [
+                styles.actionButton,
+                { backgroundColor: completed ? 'rgba(255, 255, 255, 0.9)' : '#FFFFFF', opacity: pressed ? 0.85 : 1 },
+              ]}
+              onPress={() => setCompleted(!completed)}>
+              <ThemedText style={styles.actionButtonText}>
+                {completed ? '¡Completado!' : 'Hecho'}
+              </ThemedText>
+            </Pressable>
+          </View>
+
+          {Platform.OS === 'web' && <WebBadge />}
+        </SafeAreaView>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#FFFFFF',
+    overflow: 'hidden',
+  },
+  bottomCircle: {
+    position: 'absolute',
+    bottom: -50,
+    backgroundColor: '#6F4E37',
+    zIndex: 0,
+  },
+  scrollView: {
+    flex: 1,
+    zIndex: 1,
+  },
+  contentContainer: {
+    flexGrow: 1,
     justifyContent: 'center',
-    flexDirection: 'row',
+    alignItems: 'center',
+    paddingBottom: BottomTabInset + Spacing.five,
   },
   safeArea: {
     flex: 1,
-    paddingHorizontal: Spacing.four,
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
+    width: '100%',
     maxWidth: MaxContentWidth,
-  },
-  heroSection: {
+    paddingHorizontal: Spacing.four,
     alignItems: 'center',
     justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
     gap: Spacing.four,
   },
-  title: {
-    textAlign: 'center',
+  header: {
+    alignItems: 'center',
   },
-  code: {
-    textTransform: 'uppercase',
+  subGreeting: {
+    fontSize: 16,
+    color: '#8E8E93',
+    fontWeight: '500',
   },
-  stepContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
+  mainTitle: {
+    fontSize: 34,
+    fontWeight: '700',
+    color: '#1F1F1F',
+    letterSpacing: -0.5,
+  },
+  characterContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: Spacing.two,
+  },
+  characterImage: {
+    width: 220,
+    height: 220,
+  },
+  challengeSection: {
+    alignItems: 'center',
+    gap: Spacing.two,
+    width: '100%',
+    paddingHorizontal: Spacing.four,
+    marginTop: Spacing.one,
+  },
+  badge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
+    paddingVertical: Spacing.half + 2,
+    borderRadius: BorderRadius.full,
+  },
+  badgeText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  challengeTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    textAlign: 'center',
+    marginVertical: Spacing.one,
+  },
+  actionButton: {
+    width: '100%',
+    maxWidth: 320,
+    paddingVertical: Spacing.three,
+    borderRadius: BorderRadius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: Spacing.two,
+  },
+  actionButtonText: {
+    color: '#6F4E37',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });
