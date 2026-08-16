@@ -5,7 +5,7 @@ import { Image } from 'expo-image';
 
 import { ThemedText } from '@/components/themed-text';
 import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing, BorderRadius } from '@/constants/theme';
+import { MaxContentWidth, Spacing, BorderRadius } from '@/constants/theme';
 import { ChallengeService } from '@/services/challenges';
 
 export default function HomeScreen() {
@@ -66,30 +66,30 @@ export default function HomeScreen() {
             />
           </View>
 
-          {/* Reto Diario */}
-          <View style={styles.challengeSection}>
-            <View style={styles.badge}>
-              <ThemedText style={styles.badgeText}>Reto diario</ThemedText>
-            </View>
-            <ThemedText style={styles.challengeTitle}>
-              {challenge ?? (challengeError ? 'No pudimos cargar tu reto. Intenta de nuevo.' : 'Cargando tu reto...')}
-            </ThemedText>
-
-            <Pressable
-              style={({ pressed }) => [
-                styles.actionButton,
-                { backgroundColor: completed ? 'rgba(255, 255, 255, 0.9)' : '#FFFFFF', opacity: pressed ? 0.85 : 1 },
-              ]}
-              onPress={() => setCompleted(!completed)}>
-              <ThemedText style={styles.actionButtonText}>
-                {completed ? '¡Completado!' : 'Hecho'}
-              </ThemedText>
-            </Pressable>
-          </View>
-
           {Platform.OS === 'web' && <WebBadge />}
         </SafeAreaView>
       </ScrollView>
+
+      {/* Reto Diario en la zona inferior café */}
+      <View style={[styles.challengeFooter, { bottom: height * 0.18 - 15 }]}>
+        <View style={styles.badge}>
+          <ThemedText style={styles.badgeText}>Reto diario</ThemedText>
+        </View>
+        <ThemedText style={styles.challengeTitle}>
+          {challenge ?? (challengeError ? 'No pudimos cargar tu reto. Intenta de nuevo.' : 'Cargando tu reto...')}
+        </ThemedText>
+
+        <Pressable
+          style={({ pressed }) => [
+            styles.actionButton,
+            { backgroundColor: completed ? 'rgba(255, 255, 255, 0.9)' : '#FFFFFF', opacity: pressed ? 0.85 : 1 },
+          ]}
+          onPress={() => setCompleted(!completed)}>
+          <ThemedText style={styles.actionButtonText}>
+            {completed ? '¡Completado!' : 'Hecho'}
+          </ThemedText>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -115,7 +115,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
     alignItems: 'center',
     paddingTop: Spacing.four,
-    paddingBottom: BottomTabInset + Spacing.five,
+    paddingBottom: 220,
   },
   safeArea: {
     flex: 1,
@@ -150,12 +150,15 @@ const styles = StyleSheet.create({
     width: 220,
     height: 220,
   },
-  challengeSection: {
+  challengeFooter: {
+    position: 'absolute',
+    bottom: Spacing.four,
+    left: 0,
+    right: 0,
     alignItems: 'center',
     gap: Spacing.two,
-    width: '100%',
     paddingHorizontal: Spacing.four,
-    marginTop: Spacing.two,
+    zIndex: 2,
   },
   badge: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',

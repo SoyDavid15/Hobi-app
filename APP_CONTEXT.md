@@ -25,6 +25,14 @@ Para garantizar la seguridad de la aplicación y prevenir la filtración de dato
 
 ## 3. Registro de Cambios (Changelog)
 
+### [2026-08-16] - Reto Diario Persistente y Garantía de Máximo 2 Líneas
+- **Autor:** IA (OpenCode)
+- **Cambios:**
+  - Nueva migración `supabase/migrations/0002_daily_challenges.sql`: tabla `daily_challenges` (`user_id`, `challenge_date`, `hobby_id`, `challenge`) con `unique (user_id, challenge_date)` y RLS de solo lectura para el propio usuario.
+  - Adición de los helpers `get_daily_challenge` y `save_daily_challenge` en `Backend/hobbies.py`.
+  - Actualización de `GET /message` en `Backend/main.py`: consulta el reto de hoy en la base de datos; si existe lo devuelve tal cual (mismo reto durante todo el día); si no, genera uno con Gemini a partir de un hobby aleatorio del día (semilla `user_id + fecha`) entre los hobbies guardados del usuario, lo persiste y lo devuelve. Al cambiar de fecha se genera un reto nuevo según los hobbies seleccionados. Manejo de carrera: si el insert falla por el constraint único, se re-consulta y devuelve el existente.
+  - Actualización de `Backend/ai.py`: la respuesta de Gemini ahora se recorta a las primeras 2 líneas (`"\n".join(text.splitlines()[:2])`), garantizando que el reto nunca tenga más de 2 líneas, y se usa `temperature=0` en la llamada a Gemini para respuestas más consistentes.
+
 ### [2026-08-16] - Retos Cortos y Fotografiables
 - **Autor:** IA (OpenCode)
 - **Cambios:**
