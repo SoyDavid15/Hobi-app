@@ -1,39 +1,96 @@
 # Hobi - App Context & Developer Guide
 
-Este documento sirve como contexto y registro de cambios para guiar a cualquier IA o desarrollador en futuras sesiones de trabajo en el proyecto **Hobi**.
+Este documento sirve como contexto arquitectónico, guía técnica y registro histórico de cambios para guiar a cualquier desarrollador o IA en futuras sesiones de trabajo en el proyecto **Hobi**.
 
 ---
 
 ## 1. Visión General de la Aplicación
 - **Nombre:** Hobi
-- **Framework:** Expo SDK 56 / React Native (v0.85.3) / React 19
-- **Enrutamiento:** Expo Router (`src/app/`)
-- **Estilos:** Tailwind / NativeWind / CSS globales (`src/global.css`)
-- **Plataformas soportadas:** iOS, Android, Web
+- **Propósito:** Aplicación móvil de bienestar diseñada para alejar a las personas del doomscroll mediante retos diarios prácticos, fotográficos y basados en sus pasatiempos favoritos.
+- **Frontend:** Expo SDK 56 / React Native (v0.85.3) / React 19 / TypeScript / Expo Router (`src/app/`)
+- **Backend:** FastAPI (Python) desplegado en Azure Web Apps, integrado con Google Gemini 3.5 Flash Lite para la generación determinista de retos según los hobbies del usuario.
+- **Persistencia en la Nube (100% Supabase):**
+  - **Autenticación:** Supabase Auth (Email / Contraseña / Google OAuth) con tokens persistidos en `expo-secure-store`.
+  - **Base de Datos:** PostgreSQL en Supabase con Row Level Security (RLS) habilitado.
+  - **Almacenamiento Multimedia:** Supabase Storage (Bucket público `challenge-photos`).
 
 ---
 
 ## 2. Directrices de Seguridad y Privacidad
-Para garantizar la seguridad de la aplicación y prevenir la filtración de datos, se siguen estrictamente las siguientes políticas:
-1. **Sin Secretos Hardcodeados:** Ninguna clave API, token de acceso o credencial se almacena en el código fuente. Se manejan mediante variables de entorno o almacenamiento seguro.
-2. **Almacenamiento Local Seguro:** Uso de almacenamiento seguro cifrado (`expo-secure-store` u equivalentes) para datos sensibles o de sesión, evitando `AsyncStorage` en texto plano para información crítica.
-3. **Control de Logs y Depuración:** No se deben registrar datos sensibles (PII, contraseñas, tokens) en los logs de la consola (`console.log`, etc.) ni en herramientas de reporte de errores de producción.
-4. **Validación de Entradas:** Todas las entradas de usuario y parámetros deben ser validados y sanitizados.
-5. **Comunicaciones Seguras:** Uso exclusivo de HTTPS para cualquier servicio o API externa.
+1. **Sin Secretos Hardcodeados:** Ninguna clave privada o token sensible se almacena en el código. Se manejan mediante variables de entorno (`EXPO_PUBLIC_*`, `.env`).
+2. **Persistencia en la Nube:** Ninguna foto o dato sensible se almacena permanentemente en el almacenamiento local del dispositivo. Todo viaja y se persiste en Supabase.
+3. **Almacenamiento Local Seguro:** Uso exclusivo de `expo-secure-store` para guardar el token de sesión (JWT).
+4. **Políticas RLS Estrictas:** Todas las tablas y buckets de Supabase cuentan con políticas Row Level Security que garantizan que ningún usuario pueda ver o modificar datos o fotos ajenas.
+5. **Comunicaciones Seguras:** Todas las peticiones al backend y a Supabase se realizan mediante HTTPS / WSS.
 
 ---
 
-## 3. Registro de Cambios (Changelog)
+## 3. Arquitectura del Ciclo de Retos (Cada 12 Horas)
 
-### [2026-08-23] - Captura de Foto en Reto Diario, Guardado en Supabase y Galería en Perfil
+### Turnos Diarios (Slots)
+La aplicación ofrece **2 retos diarios** que cambian automáticamente según la hora local del usuario:
+- **Turno Mañana (`AM`):** 12:00 AM (00:00) a 11:59 AM.
+- **Turno Tarde/Noche (`PM`):** 12:00 PM (12:00) a 11:59 PM.
+
+### Flujo de Datos
+```
+[Cliente Móvil (Expo)]
+   │
+   ├─► GET /message?client_date=YYYY-MM-DD&period=AM|PM
+   │     └─► Backend consulta tabla daily_challenges en Supabase
+   │           ├─ Si existe: devuelve el reto existente del turno
+   │           └─ Si no existe: elige un hobby del usuario con semilla determinista
+   │                (user_id + fecha + turno), consulta a Gemini, persiste en Supabase y devuelve.
+   │
+   ├─► Botón "Hecho" en HomeScreen
+   │     └─► Abre cámara / galería con expo-image-picker
+   │     └─► Sube imagen a Supabase Storage: challenge-photos/${user_id}/${date}_${period}_${timestamp}.jpg
+   │     └─► Actualiza fila en daily_challenges (photo_url, is_completed=true, completed_at=now())
+   │     └─► Sincroniza con backend /challenges/complete
+   │
+   └─► Galería en ProfileScreen
+         └─► Consulta retos completados con foto ordenados por fecha y turno
+         └─► Muestra fotos con badge (ej. "2026-08-23 • Tarde") y visor modal interactivo
+         └─► Calcula racha activa en días consecutivos
+```
+
+---
+
+## 4. Esquema de Base de Datos y Storage en Supabase
+
+### Tabla `public.daily_challenges`
+| Columna | Tipo | Descripción |
+|---|---|---|
+| `id` | `uuid` | Llave primaria (`default gen_random_uuid()`) |
+| `user_id` | `uuid` | Referencia a `auth.users(id)` en cascada |
+| `challenge_date` | `date` | Fecha del reto (`YYYY-MM-DD`) |
+| `period` | `text` | Turno de 12 horas (`'AM'` o `'PM'`) |
+| `hobby_id` | `text` | ID del pasatiempo seleccionado para el reto |
+| `challenge` | `text` | Texto del reto (máx 2 líneas, fotografiable) |
+| `photo_url` | `text` | URL pública de la foto de evidencia en Storage |
+| `is_completed` | `boolean` | `true` si el usuario completó el reto con foto |
+| `completed_at` | `timestamptz` | Fecha y hora exacta en que se completó |
+| `created_at` | `timestamptz` | Fecha y hora de creación (`default now()`) |
+
+- **Restricción Única:** `unique (user_id, challenge_date, period)`
+
+### Bucket de Supabase Storage: `challenge-photos`
+- **Visibilidad:** `public = true`
+- **Ruta de Archivos:** `${user_id}/${challenge_date}_${period}_${timestamp}.jpg`
+
+---
+
+## 5. Registro de Cambios (Changelog)
+
+### [2026-08-23] - Retos Cada 12 Horas, Captura de Evidencia Fotográfica y Galería en Perfil
 - **Autor:** IA (Antigravity)
-- **Cambios:**
-  - Nueva migración `supabase/migrations/0003_challenge_completion.sql`: añade `photo_url`, `is_completed` y `completed_at` a `daily_challenges`, habilita RLS para update/insert de los usuarios, y configura el bucket `challenge-photos` en Supabase Storage con políticas de acceso y subida.
-  - Instalación y configuración de `expo-image-picker` en `package.json` y `app.json` con los permisos necesarios de cámara y galería.
-  - Actualización de `src/services/challenges.ts`: métodos `getChallenge()`, `uploadChallengePhoto()`, `completeChallenge()` y `getCompletedChallenges()`, permitiendo subir fotos a Supabase Storage con codificación Base64/Blob y actualizar la base de datos vinculando la foto directamente con el reto diario correspondiente.
-  - Actualización de la pantalla Home (`src/app/index.tsx`): al pulsar "Hecho", solicita permisos de cámara/galería, captura la foto como evidencia, muestra estado de guardado con `ActivityIndicator` y marca el reto como completado con retroalimentación visual. Si el reto de hoy ya estaba completado, inicia en estado "¡Completado!".
-  - Actualización de la pantalla Perfil (`src/app/profile.tsx`): reemplazo de los placeholders estáticos por la galería interactiva de retos completados reales usando `expo-image`, visualizador modal con detalle del reto y fecha al tocar cualquier foto, estado vacío ilustrado y cálculo dinámico de la racha de días activos.
-  - Actualización del Backend (`Backend/hobbies.py`, `Backend/main.py`): soporte en `GET /message` para devolver metadata de completado (`is_completed`, `photo_url`), y endpoints `GET /challenges/history` y `POST /challenges/complete`.
+- **Cambios Principales:**
+  - **Rotación Cada 12 Horas:** Implementación del ciclo de 2 retos diarios (`AM`: 12:00 AM - 12:00 PM y `PM`: 12:00 PM - 12:00 AM) basado en la hora local del dispositivo con recarga reactiva ante cambios de foco y primer plano (`AppState`).
+  - **Captura de Evidencia Fotográfica:** Integración de `expo-image-picker` en `HomeScreen` permitiendo tomar foto con cámara o elegir de galería al pulsar "Hecho", con subida directa a Supabase Storage y actualización del estado a "¡Completado!".
+  - **Persistencia en la Nube y Políticas:** Creación de migraciones SQL `0003_challenge_completion.sql` y `0004_twelve_hour_challenges.sql` para el bucket `challenge-photos` y la tabla `daily_challenges` con RLS para `SELECT`, `INSERT` y `UPDATE`.
+  - **Galería Interactiva en Perfil:** En `ProfileScreen`, reemplazo de placeholders por la cuadrícula de fotos reales de retos completados, badges de fecha y turno (`Mañana` / `Tarde`), modal emergente con detalle del reto y cálculo dinámico de la racha de días activos.
+  - **Backend FastAPI:** Actualización de `Backend/hobbies.py` y `Backend/main.py` para soportar el parámetro `period`, generación determinista con semilla `user_id:fecha:period`, y endpoints `POST /challenges/complete` y `GET /challenges/history`.
+  - **Repositorios Git:** Frontend y Backend vinculados y sincronizados con sus respectivos repositorios remotos en GitHub (`SoyDavid15/Hobi-app` y `SoyDavid15/Hobi-backend`).
 
 ### [2026-08-16] - Reto Diario Persistente y Garantía de Máximo 2 Líneas
 - **Autor:** IA (OpenCode)
