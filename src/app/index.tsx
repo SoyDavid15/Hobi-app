@@ -58,43 +58,23 @@ export default function HomeScreen() {
     return () => sub.remove();
   }, [loadChallenge]);
 
-  const takeOrPickPhoto = async (mode: 'camera' | 'library') => {
+  const takePhoto = async () => {
     try {
-      let result: ImagePicker.ImagePickerResult;
-
-      if (mode === 'camera') {
-        const { status } = await ImagePicker.requestCameraPermissionsAsync();
-        if (status !== 'granted') {
-          Alert.alert(
-            'Permiso requerido',
-            'Se necesita acceso a la cámara para tomar la foto de tu reto diario.'
-          );
-          return;
-        }
-
-        result = await ImagePicker.launchCameraAsync({
-          allowsEditing: true,
-          aspect: [4, 3],
-          quality: 0.8,
-          base64: true,
-        });
-      } else {
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== 'granted') {
-          Alert.alert(
-            'Permiso requerido',
-            'Se necesita acceso a tus fotos para elegir la evidencia.'
-          );
-          return;
-        }
-
-        result = await ImagePicker.launchImageLibraryAsync({
-          allowsEditing: true,
-          aspect: [4, 3],
-          quality: 0.8,
-          base64: true,
-        });
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permiso requerido',
+          'Se necesita acceso a la cámara para tomar la foto de tu reto diario.'
+        );
+        return;
       }
+
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+        base64: true,
+      });
 
       if (result.canceled || !result.assets || result.assets.length === 0) {
         return;
@@ -125,7 +105,6 @@ export default function HomeScreen() {
 
   const periodLabel = period === 'AM' ? 'Mañana' : 'Tarde';
   const periodIcon = period === 'AM' ? '☀️' : '🌙';
-  const nextChange = period === 'AM' ? '12:00 PM' : '12:00 AM';
 
   const handlePressHecho = () => {
     if (completed) {
@@ -134,29 +113,7 @@ export default function HomeScreen() {
     }
     if (submitting) return;
 
-    if (Platform.OS === 'web') {
-      takeOrPickPhoto('camera');
-      return;
-    }
-
-    Alert.alert(
-      'Registrar Evidencia',
-      '¿Cómo deseas registrar la evidencia de tu reto?',
-      [
-        {
-          text: 'Tomar foto',
-          onPress: () => takeOrPickPhoto('camera'),
-        },
-        {
-          text: 'Elegir de galería',
-          onPress: () => takeOrPickPhoto('library'),
-        },
-        {
-          text: 'Cancelar',
-          style: 'cancel',
-        },
-      ]
-    );
+    takePhoto();
   };
 
   return (
@@ -213,10 +170,10 @@ export default function HomeScreen() {
             styles.actionButton,
             {
               backgroundColor: completed ? 'rgba(255, 255, 255, 0.95)' : '#FFFFFF',
-              opacity: pressed || submitting ? 0.85 : 1,
+              opacity: pressed || submitting || completed ? (completed ? 1 : 0.85) : 1,
             },
           ]}
-          disabled={submitting}
+          disabled={completed || submitting}
           onPress={handlePressHecho}>
           {submitting ? (
             <View style={styles.loadingContainer}>

@@ -92,6 +92,12 @@ La aplicación ofrece **2 retos diarios** que cambian automáticamente según la
   - **Backend FastAPI:** Actualización de `Backend/hobbies.py` y `Backend/main.py` para soportar el parámetro `period`, generación determinista con semilla `user_id:fecha:period`, y endpoints `POST /challenges/complete` y `GET /challenges/history`.
   - **Repositorios Git:** Frontend y Backend vinculados y sincronizados con sus respectivos repositorios remotos en GitHub (`SoyDavid15/Hobi-app` y `SoyDavid15/Hobi-backend`).
 
+### [2026-08-23] - Captura Exclusiva por Cámara y Bloqueo Persistente en la Nube
+- **Autor:** IA (OpenCode)
+- **Cambios:**
+  - Eliminación del menú de opciones (Cámara o Galería) al pulsar el botón "Hecho" en la pantalla Home (`src/app/index.tsx`), configurando la toma de foto directamente mediante la cámara (`expo-image-picker` `launchCameraAsync`).
+  - Bloqueo persistente y multiplataforma del botón de reto completado (`disabled={completed || submitting}`) sincronizado con Supabase (`daily_challenges`), asegurando que al cerrar y reabrir la app (o cambiar de dispositivo) el botón permanezca bloqueado si el reto ya fue completado, respetando el ciclo de retos de 12 horas (AM/PM).
+
 ### [2026-08-16] - Reto Diario Persistente y Garantía de Máximo 2 Líneas
 - **Autor:** IA (OpenCode)
 - **Cambios:**
