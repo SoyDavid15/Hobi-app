@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Modal,
   Dimensions,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -25,17 +26,24 @@ export default function ProfileScreen() {
   const router = useRouter();
   const [challenges, setChallenges] = useState<CompletedChallengeItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [selectedItem, setSelectedItem] = useState<CompletedChallengeItem | null>(null);
 
   const loadProfileData = useCallback(async () => {
-    setLoading(true);
     const { challenges: items } = await ChallengeService.getCompletedChallenges();
     setChallenges(items);
     setLoading(false);
+    setRefreshing(false);
   }, []);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    loadProfileData();
+  }, [loadProfileData]);
 
   useFocusEffect(
     useCallback(() => {
+      setLoading(true);
       loadProfileData();
     }, [loadProfileData])
   );
@@ -78,7 +86,15 @@ export default function ProfileScreen() {
     <ScrollView
       style={[styles.scrollView, { backgroundColor: '#FFFFFF' }]}
       contentContainerStyle={styles.contentContainer}
-      showsVerticalScrollIndicator={false}>
+      showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          colors={['#6F4E37']}
+          tintColor="#6F4E37"
+        />
+      }>
       <SafeAreaView style={styles.safeArea}>
         {/* Botón Hamburguesa en la esquina superior derecha */}
         <View style={styles.topBar}>

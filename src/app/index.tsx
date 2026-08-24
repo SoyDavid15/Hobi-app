@@ -105,7 +105,9 @@ export default function HomeScreen() {
 
       const { success, error } = await ChallengeService.completeChallenge(
         asset.uri,
-        asset.base64
+        asset.base64,
+        undefined,
+        challenge
       );
 
       if (success) {
