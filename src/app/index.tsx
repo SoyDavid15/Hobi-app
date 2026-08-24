@@ -157,7 +157,7 @@ export default function HomeScreen() {
       </ScrollView>
 
       {/* Reto del turno actual en la zona inferior café */}
-      <View style={[styles.challengeFooter, { bottom: height * 0.18 - 15 }]}>
+      <View style={[styles.challengeFooter, { bottom: height * 0.12 }]}>
         <View style={styles.badge}>
           <ThemedText style={styles.badgeText}>{periodIcon} Reto de la {periodLabel.toLowerCase()}</ThemedText>
         </View>
@@ -236,7 +236,7 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    marginTop: Spacing.two,
+    marginTop: Spacing.five,
   },
   subGreeting: {
     fontSize: 16,
@@ -252,6 +252,7 @@ const styles = StyleSheet.create({
   characterContainer: {
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: Spacing.three,
     paddingVertical: Spacing.one,
   },
   characterImage: {

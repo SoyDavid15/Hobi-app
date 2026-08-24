@@ -10,8 +10,8 @@ import {
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useRouter } from 'expo-router';
+import { useCallback, useState, useEffect, useRef } from 'react';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -41,12 +41,14 @@ export default function ProfileScreen() {
     loadProfileData();
   }, [loadProfileData]);
 
-  useFocusEffect(
-    useCallback(() => {
-      setLoading(true);
+  const hasLoadedRef = useRef(false);
+
+  useEffect(() => {
+    if (!hasLoadedRef.current) {
+      hasLoadedRef.current = true;
       loadProfileData();
-    }, [loadProfileData])
-  );
+    }
+  }, [loadProfileData]);
 
   // Calcular racha en base a retos completados
   const calculateStreak = (items: CompletedChallengeItem[]) => {
