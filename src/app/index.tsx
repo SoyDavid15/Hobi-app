@@ -58,6 +58,36 @@ export default function HomeScreen() {
     return () => sub.remove();
   }, [loadChallenge]);
 
+  // Auto-reload at the next slot boundary (12:00 or 00:00) even if the app stays in foreground
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let cancelled = false;
+
+    const scheduleNextBoundary = () => {
+      const now = new Date();
+      const next = new Date(now);
+      if (now.getHours() < 12) {
+        next.setHours(12, 0, 0, 0);
+      } else {
+        next.setDate(now.getDate() + 1);
+        next.setHours(0, 0, 0, 0);
+      }
+      const ms = next.getTime() - now.getTime();
+      timer = setTimeout(() => {
+        if (cancelled) return;
+        lastSlotRef.current = ''; // force reload
+        loadChallenge();
+        scheduleNextBoundary(); // re-arm for the following boundary
+      }, ms + 1000);
+    };
+
+    scheduleNextBoundary();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [loadChallenge]);
+
   const takePhoto = async () => {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();

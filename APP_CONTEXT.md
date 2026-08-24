@@ -82,6 +82,12 @@ La aplicación ofrece **2 retos diarios** que cambian automáticamente según la
 
 ## 5. Registro de Cambios (Changelog)
 
+### [2026-08-24] - Retos Realmente Variables por Turno y Rotación con App en Primer Plano
+- **Autor:** IA (OpenCode)
+- **Cambios Principales:**
+  - **Corrección de Reto Repetido entre Turnos/Días:** La generación ya no es determinista a nivel de texto. En `Backend/ai.py`, `get_message(hobby, date_str, period)` ahora incluye la fecha y el turno (`mañana`/`tarde`) en el prompt y usa `temperature=0.9` (antes `0`), por lo que cada turno genera un reto distinto aunque se repita el hobby. La semilla `user_id:fecha:period` en `Backend/main.py` sigue seleccionando el hobby de forma determinista por turno, y el caché por `(user_id, challenge_date, period)` mantiene el reto estable dentro del turno.
+  - **Rotación con App Abierta:** En `src/app/index.tsx` se agregó un `setTimeout` que dispara en el próximo límite de turno (12:00 / 00:00 hora local) y fuerza la recarga del reto aunque la app permanezca en primer plano (antes solo recargaba al montar la pantalla o al volver de segundo plano vía `AppState`).
+
 ### [2026-08-23] - Retos Cada 12 Horas, Captura de Evidencia Fotográfica y Galería en Perfil
 - **Autor:** IA (Antigravity)
 - **Cambios Principales:**
