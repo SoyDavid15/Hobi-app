@@ -213,22 +213,47 @@ export const ChallengeService = {
         return { success: false, photoUrl: null, error: uploadErr || 'No se pudo subir la foto' };
       }
 
-      // 2. Intentar actualizar directamente en Supabase DB (con period)
-      const { error: dbError } = await supabase
+      // 2. Actualizar en Supabase DB directamente
+      let updated = false;
+      const { data: res1, error: err1 } = await supabase
         .from('daily_challenges')
         .update({
           photo_url: photoUrl,
           is_completed: true,
+          period: period,
           completed_at: new Date().toISOString(),
         })
         .eq('user_id', user.id)
         .eq('challenge_date', today)
-        .eq('period', period);
+        .eq('period', period)
+        .select();
 
-      if (dbError) {
-        // Fallback: sincronizar a través del Backend API
-        const token = await getAccessToken();
-        if (token) {
+      if (!err1 && res1 && res1.length > 0) {
+        updated = true;
+      }
+
+      if (!updated) {
+        const { data: res2 } = await supabase
+          .from('daily_challenges')
+          .update({
+            photo_url: photoUrl,
+            is_completed: true,
+            period: period,
+            completed_at: new Date().toISOString(),
+          })
+          .eq('user_id', user.id)
+          .eq('challenge_date', today)
+          .select();
+
+        if (res2 && res2.length > 0) {
+          updated = true;
+        }
+      }
+
+      // 3. Sincronizar siempre con el backend vía supabase_admin para máxima consistencia
+      const token = await getAccessToken();
+      if (token) {
+        try {
           await fetch(`${API_URL}/challenges/complete`, {
             method: 'POST',
             headers: {
@@ -238,9 +263,11 @@ export const ChallengeService = {
             body: JSON.stringify({
               photo_url: photoUrl,
               challenge_date: today,
-              period,
+              period: period,
             }),
           });
+        } catch (apiErr) {
+          console.warn('Backend sync fallback notice:', apiErr);
         }
       }
 
@@ -263,12 +290,11 @@ export const ChallengeService = {
         return { challenges: [], error: 'Usuario no autenticado' };
       }
 
-      // Consultar directamente Supabase
+      // 1. Consultar directamente Supabase (cualquier reto con foto)
       const { data, error } = await supabase
         .from('daily_challenges')
         .select('id, challenge, photo_url, challenge_date, hobby_id, period, completed_at, created_at')
         .eq('user_id', user.id)
-        .eq('is_completed', true)
         .not('photo_url', 'is', null)
         .order('challenge_date', { ascending: false });
 
@@ -276,7 +302,7 @@ export const ChallengeService = {
         return { challenges: data as CompletedChallengeItem[], error: null };
       }
 
-      // Fallback al Backend
+      // 2. Fallback al Backend API
       const token = await getAccessToken();
       if (token) {
         const res = await fetch(`${API_URL}/challenges/history`, {
@@ -284,7 +310,9 @@ export const ChallengeService = {
         });
         if (res.ok) {
           const body = await res.json();
-          return { challenges: body.history || [], error: null };
+          if (body.history && body.history.length > 0) {
+            return { challenges: body.history, error: null };
+          }
         }
       }
 
