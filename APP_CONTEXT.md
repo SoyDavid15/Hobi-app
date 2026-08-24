@@ -25,6 +25,16 @@ Para garantizar la seguridad de la aplicación y prevenir la filtración de dato
 
 ## 3. Registro de Cambios (Changelog)
 
+### [2026-08-23] - Captura de Foto en Reto Diario, Guardado en Supabase y Galería en Perfil
+- **Autor:** IA (Antigravity)
+- **Cambios:**
+  - Nueva migración `supabase/migrations/0003_challenge_completion.sql`: añade `photo_url`, `is_completed` y `completed_at` a `daily_challenges`, habilita RLS para update/insert de los usuarios, y configura el bucket `challenge-photos` en Supabase Storage con políticas de acceso y subida.
+  - Instalación y configuración de `expo-image-picker` en `package.json` y `app.json` con los permisos necesarios de cámara y galería.
+  - Actualización de `src/services/challenges.ts`: métodos `getChallenge()`, `uploadChallengePhoto()`, `completeChallenge()` y `getCompletedChallenges()`, permitiendo subir fotos a Supabase Storage con codificación Base64/Blob y actualizar la base de datos vinculando la foto directamente con el reto diario correspondiente.
+  - Actualización de la pantalla Home (`src/app/index.tsx`): al pulsar "Hecho", solicita permisos de cámara/galería, captura la foto como evidencia, muestra estado de guardado con `ActivityIndicator` y marca el reto como completado con retroalimentación visual. Si el reto de hoy ya estaba completado, inicia en estado "¡Completado!".
+  - Actualización de la pantalla Perfil (`src/app/profile.tsx`): reemplazo de los placeholders estáticos por la galería interactiva de retos completados reales usando `expo-image`, visualizador modal con detalle del reto y fecha al tocar cualquier foto, estado vacío ilustrado y cálculo dinámico de la racha de días activos.
+  - Actualización del Backend (`Backend/hobbies.py`, `Backend/main.py`): soporte en `GET /message` para devolver metadata de completado (`is_completed`, `photo_url`), y endpoints `GET /challenges/history` y `POST /challenges/complete`.
+
 ### [2026-08-16] - Reto Diario Persistente y Garantía de Máximo 2 Líneas
 - **Autor:** IA (OpenCode)
 - **Cambios:**
