@@ -135,13 +135,20 @@ export default function HomeScreen() {
 
   const periodLabel = period === 'AM' ? 'Mañana' : 'Tarde';
   const periodIcon = period === 'AM' ? '☀️' : '🌙';
+  const challengeReady = challenge !== null;
+
+  const handleRetryLoad = () => {
+    if (!challengeError) return;
+    lastSlotRef.current = ''; // bypass same-slot guard
+    loadChallenge();
+  };
 
   const handlePressHecho = () => {
     if (completed) {
       Alert.alert('¡Reto completado!', `Ya registraste tu evidencia del turno de la ${periodLabel.toLowerCase()}. ¡Bien hecho!`);
       return;
     }
-    if (submitting) return;
+    if (submitting || !challengeReady) return;
 
     takePhoto();
   };
@@ -191,19 +198,21 @@ export default function HomeScreen() {
         <View style={styles.badge}>
           <ThemedText style={styles.badgeText}>{periodIcon} Reto de la {periodLabel.toLowerCase()}</ThemedText>
         </View>
-        <ThemedText style={styles.challengeTitle}>
-          {challenge ?? (challengeError ? 'No pudimos cargar tu reto. Intenta de nuevo.' : 'Cargando tu reto...')}
-        </ThemedText>
+        <Pressable disabled={!challengeError} onPress={handleRetryLoad}>
+          <ThemedText style={[styles.challengeTitle, challengeError ? styles.challengeTitleError : null]}>
+            {challenge ?? (challengeError ? 'No pudimos cargar tu reto. Intenta de nuevo.' : 'Cargando tu reto...')}
+          </ThemedText>
+        </Pressable>
 
         <Pressable
           style={({ pressed }) => [
             styles.actionButton,
             {
               backgroundColor: completed ? 'rgba(255, 255, 255, 0.95)' : '#FFFFFF',
-              opacity: pressed || submitting || completed ? (completed ? 1 : 0.85) : 1,
+              opacity: completed ? 1 : (pressed || submitting || !challengeReady ? 0.85 : 1),
             },
           ]}
-          disabled={completed || submitting}
+          disabled={completed || submitting || !challengeReady}
           onPress={handlePressHecho}>
           {submitting ? (
             <View style={styles.loadingContainer}>
@@ -316,6 +325,9 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     textAlign: 'center',
     marginVertical: Spacing.one,
+  },
+  challengeTitleError: {
+    textDecorationLine: 'underline',
   },
   actionButton: {
     width: '100%',
