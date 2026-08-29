@@ -51,7 +51,7 @@ La aplicación ofrece **2 retos diarios** que cambian automáticamente según la
    └─► Galería en ProfileScreen
          └─► Consulta retos completados con foto ordenados por fecha y turno
          └─► Muestra fotos con badge (ej. "2026-08-23 • Tarde") y visor modal interactivo
-         └─► Calcula racha activa en días consecutivos
+         └─► Calcula la racha de días consecutivos (≥1 reto por día) con `src/lib/streak.ts` en fechas locales
 ```
 
 ---
@@ -81,6 +81,22 @@ La aplicación ofrece **2 retos diarios** que cambian automáticamente según la
 ---
 
 ## 5. Registro de Cambios (Changelog)
+
+### [2026-08-25] - Personaje "Fit" al Superar 5 Días de Racha
+- **Autor:** IA (OpenCode)
+- **Cambios:**
+  - **`src/app/index.tsx`:** el personaje de la pantalla Home ahora se intercambia dinámicamente según la racha activa: con racha > 5 días (6+) se muestra `hobiCharacterFit.png`; con racha ≤ 5 se muestra `hobiCharacter.png`. Se usan constantes de módulo (`HOBI_CHARACTER` / `HOBI_CHARACTER_FIT`) y `transition={250}` de `expo-image` para un cambio suave entre fuentes.
+  - **Carga de la racha al montar Home:** `loadChallenge()` ahora también obtiene las fechas completadas (`ChallengeService.getCompletedDates()`) y calcula la racha con `calculateStreak()`, antes la racha solo se actualizaba tras completar un reto en la sesión. Esto refresca el personaje al abrir la app, al volver al primer plano y al cruzar el límite de turno (12:00 / 00:00), de modo que una racha rota a medianoche devuelve el personaje a su versión normal. El estado inicial de `currentStreak` pasó de `1` a `0` (fallback seguro al personaje normal si la carga falla).
+
+### [2026-08-24] - Sistema de Racha por Días Consecutivos (`src/lib/streak.ts`)
+- **Autor:** IA (OpenCode)
+- **Cambios:**
+  - **Nueva utilidad `src/lib/streak.ts`:** funciones puras y testeables `calculateStreak(completedDates, today?)` y `formatLocalDate(date)`. El cálculo usa fechas LOCALES del dispositivo (`YYYY-MM-DD`), consistente con `getCurrentSlot()` de `services/challenges.ts`; el cálculo anterior usaba `toISOString()` (UTC), lo que rompía o desplazaba días según el huso horario del usuario.
+  - **Semántica de la racha (definida con el equipo):**
+    - Un día "cumplido" = al menos 1 reto completado de sus 2 turnos (AM o PM).
+    - La racha se ancla en HOY si hay reto completado hoy; si no, en AYER (la racha sigue viva mientras el día de hoy siga abierto y el usuario aún pueda completar su reto).
+    - Si ni hoy ni ayer tienen retos completados → la racha es 0: si un día termina sin completar ningún reto, la racha vuelve a 0 al día siguiente.
+  - **`src/app/profile.tsx`:** eliminado el cálculo inline de racha y el fallback artificial `Math.max(streak, 1)` (que impedía que la racha volviera realmente a 0); ahora usa `calculateStreak(challenges.map(c => c.challenge_date))` sin peticiones de red adicionales.
 
 ### [2026-08-24] - Retos Realmente Variables por Turno y Rotación con App en Primer Plano
 - **Autor:** IA (OpenCode)

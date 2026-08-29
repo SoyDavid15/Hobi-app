@@ -3,13 +3,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
-import * as Linking from 'expo-linking';
 
 import { ThemedText } from '@/components/themed-text';
 import { WebBadge } from '@/components/web-badge';
 import { MaxContentWidth, Spacing, BorderRadius } from '@/constants/theme';
 import { AuthService } from '@/services/auth';
-import { supabase } from '@/lib/supabase';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -18,6 +16,7 @@ export default function AuthScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [username, setUsername] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -30,16 +29,31 @@ export default function AuthScreen() {
       return;
     }
 
-    if (isSignUp && password !== confirmPassword) {
-      setErrorMessage('Las contraseñas no coinciden.');
+    if (password.length > 16) {
+      setErrorMessage('La contraseña debe tener máximo 16 caracteres.');
       return;
+    }
+
+    if (isSignUp) {
+      if (!username.trim()) {
+        setErrorMessage('Por favor ingresa un nombre de usuario.');
+        return;
+      }
+      if (username.trim().length > 8) {
+        setErrorMessage('El nombre de usuario debe tener máximo 8 caracteres.');
+        return;
+      }
+      if (password !== confirmPassword) {
+        setErrorMessage('Las contraseñas no coinciden.');
+        return;
+      }
     }
 
     setLoading(true);
     setErrorMessage(null);
 
     if (isSignUp) {
-      const result = await AuthService.signUp(email, password);
+      const result = await AuthService.signUp(email, password, username.trim());
       setLoading(false);
       if (result.error) {
         setErrorMessage(result.error);
@@ -52,35 +66,6 @@ export default function AuthScreen() {
       if (result.error) {
         setErrorMessage(result.error);
       }
-    }
-  };
-
-  const handleGoogleAuth = async () => {
-    try {
-      setLoading(true);
-      setErrorMessage(null);
-      const redirectUri = Linking.createURL('/');
-
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: redirectUri,
-          skipBrowserRedirect: Platform.OS === 'web',
-        },
-      });
-
-      if (error) throw error;
-
-      if (Platform.OS !== 'web' && data?.url) {
-        const res = await WebBrowser.openAuthSessionAsync(data.url, redirectUri);
-        if (res.type === 'success' && res.url) {
-          // Supabase maneja la sesión automáticamente
-        }
-      }
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Error al autenticar con Google');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -105,6 +90,7 @@ export default function AuthScreen() {
                 setIsSignUp(false);
                 setPassword('');
                 setConfirmPassword('');
+                setUsername('');
               }}>
               <ThemedText style={styles.primaryButtonText}>Ir a Iniciar Sesión</ThemedText>
             </Pressable>
@@ -116,6 +102,7 @@ export default function AuthScreen() {
                 setIsSignUp(false);
                 setPassword('');
                 setConfirmPassword('');
+                setUsername('');
               }}>
               <ThemedText style={styles.secondaryButtonText}>Volver al login</ThemedText>
             </Pressable>
@@ -156,45 +143,68 @@ export default function AuthScreen() {
             keyboardType="email-address"
           />
 
-          <View style={styles.passwordContainer}>
-            <TextInput
-              style={[styles.input, styles.passwordInput]}
-              placeholder="Contraseña"
-              placeholderTextColor="#8E8E93"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPassword}
-            />
-            <Pressable
-              style={styles.eyeIcon}
-              onPress={() => setShowPassword(!showPassword)}>
-              <Ionicons
-                name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                size={22}
-                color="#8E8E93"
-              />
-            </Pressable>
-          </View>
-
           {isSignUp && (
+            <View>
+              <TextInput
+                style={styles.input}
+                placeholder="Nombre de usuario (máx. 8 car.)"
+                placeholderTextColor="#8E8E93"
+                value={username}
+                onChangeText={(text) => setUsername(text.slice(0, 8))}
+                maxLength={8}
+                autoCapitalize="none"
+              />
+              <ThemedText style={styles.charCounter}>{username.length}/8</ThemedText>
+            </View>
+          )}
+
+          <View>
             <View style={styles.passwordContainer}>
               <TextInput
                 style={[styles.input, styles.passwordInput]}
-                placeholder="Confirmar contraseña"
+                placeholder="Contraseña (máx. 16 car.)"
                 placeholderTextColor="#8E8E93"
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                secureTextEntry={!showConfirmPassword}
+                value={password}
+                onChangeText={(text) => setPassword(text.slice(0, 16))}
+                maxLength={16}
+                secureTextEntry={!showPassword}
               />
               <Pressable
                 style={styles.eyeIcon}
-                onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
+                onPress={() => setShowPassword(!showPassword)}>
                 <Ionicons
-                  name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'}
+                  name={showPassword ? 'eye-off-outline' : 'eye-outline'}
                   size={22}
                   color="#8E8E93"
                 />
               </Pressable>
+            </View>
+            <ThemedText style={styles.charCounter}>{password.length}/16</ThemedText>
+          </View>
+
+          {isSignUp && (
+            <View>
+              <View style={styles.passwordContainer}>
+                <TextInput
+                  style={[styles.input, styles.passwordInput]}
+                  placeholder="Confirmar contraseña"
+                  placeholderTextColor="#8E8E93"
+                  value={confirmPassword}
+                  onChangeText={(text) => setConfirmPassword(text.slice(0, 16))}
+                  maxLength={16}
+                  secureTextEntry={!showConfirmPassword}
+                />
+                <Pressable
+                  style={styles.eyeIcon}
+                  onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
+                  <Ionicons
+                    name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'}
+                    size={22}
+                    color="#8E8E93"
+                  />
+                </Pressable>
+              </View>
+              <ThemedText style={styles.charCounter}>{confirmPassword.length}/16</ThemedText>
             </View>
           )}
 
@@ -215,20 +225,6 @@ export default function AuthScreen() {
                 {isSignUp ? 'Crear Cuenta' : 'Iniciar Sesión'}
               </ThemedText>
             )}
-          </Pressable>
-
-          <View style={styles.dividerContainer}>
-            <View style={styles.dividerLine} />
-            <ThemedText style={styles.dividerText}>o</ThemedText>
-            <View style={styles.dividerLine} />
-          </View>
-
-          <Pressable
-            style={({ pressed }) => [styles.googleButton, { opacity: pressed || loading ? 0.8 : 1 }]}
-            onPress={handleGoogleAuth}
-            disabled={loading}>
-            <Ionicons name="logo-google" size={20} color="#1F1F1F" />
-            <ThemedText style={styles.googleButtonText}>Continuar con Google</ThemedText>
           </Pressable>
 
           <Pressable
@@ -315,6 +311,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#F7F6F3',
     color: '#1F1F1F',
   },
+  charCounter: {
+    fontSize: 11,
+    color: '#8E8E93',
+    textAlign: 'right',
+    marginTop: 4,
+    marginRight: 4,
+  },
   passwordContainer: {
     position: 'relative',
     justifyContent: 'center',
@@ -358,37 +361,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   secondaryButtonText: {
-    color: '#1F1F1F',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  dividerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: Spacing.one,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#EAE6E1',
-  },
-  dividerText: {
-    paddingHorizontal: Spacing.three,
-    color: '#8E8E93',
-    fontSize: 14,
-  },
-  googleButton: {
-    height: 52,
-    borderWidth: 1,
-    borderColor: '#EAE6E1',
-    borderRadius: BorderRadius.full,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.two,
-    backgroundColor: '#FFFFFF',
-  },
-  googleButtonText: {
     color: '#1F1F1F',
     fontSize: 16,
     fontWeight: '600',

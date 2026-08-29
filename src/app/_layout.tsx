@@ -8,6 +8,7 @@ import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import AppTabs from '@/components/app-tabs';
 import AuthScreen from '@/app/auth';
 import { supabase } from '@/lib/supabase';
+import { LanguageProvider } from '@/context/LanguageContext';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -36,8 +37,10 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      {session && session.user ? <AppTabs /> : <AuthScreen />}
+      <LanguageProvider>
+        <AnimatedSplashOverlay />
+        {session && session.user ? <AppTabs /> : <AuthScreen />}
+      </LanguageProvider>
     </ThemeProvider>
   );
 }

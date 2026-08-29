@@ -7,8 +7,14 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { ThemedText } from '@/components/themed-text';
 import { WebBadge } from '@/components/web-badge';
+import { CompletionSheet } from '@/components/completion-sheet';
 import { MaxContentWidth, Spacing, BorderRadius } from '@/constants/theme';
 import { ChallengeService, getCurrentSlot, type ChallengePeriod } from '@/services/challenges';
+import { calculateStreak } from '@/lib/streak';
+import { getRandomMotivationalMessage } from '@/lib/motivation';
+
+const HOBI_CHARACTER = require('@/assets/images/hobiCharacter.png');
+const HOBI_CHARACTER_FIT = require('@/assets/images/hobiCharacterFit.png');
 
 export default function HomeScreen() {
   const [completed, setCompleted] = useState(false);
@@ -16,6 +22,9 @@ export default function HomeScreen() {
   const [challenge, setChallenge] = useState<string | null>(null);
   const [challengeError, setChallengeError] = useState<string | null>(null);
   const [period, setPeriod] = useState<ChallengePeriod>(getCurrentSlot().period);
+  const [showCompletion, setShowCompletion] = useState(false);
+  const [motivationalMessage, setMotivationalMessage] = useState('');
+  const [currentStreak, setCurrentStreak] = useState(0);
   const lastSlotRef = useRef<string>('');
   const { width, height } = useWindowDimensions();
 
@@ -37,6 +46,15 @@ export default function HomeScreen() {
     setCompleted(result.isCompleted);
     setChallengeError(result.error);
     setPeriod(result.period);
+
+    // Cargar la racha activa para intercambiar el personaje (versión "fit" con racha > 5 días).
+    // En caso de error, se muestra el personaje normal (fallback seguro).
+    try {
+      const dates = await ChallengeService.getCompletedDates();
+      setCurrentStreak(calculateStreak(dates));
+    } catch {
+      setCurrentStreak(0);
+    }
   }, []);
 
   useEffect(() => {
@@ -122,7 +140,21 @@ export default function HomeScreen() {
 
       if (success) {
         setCompleted(true);
-        Alert.alert('¡Excelente trabajo! 🎉', 'Tu foto y reto completado se guardaron con éxito.');
+        try {
+          const dates = await ChallengeService.getCompletedDates();
+          const today = getCurrentSlot().date;
+          if (!dates.includes(today)) {
+            dates.push(today);
+          }
+          const streak = calculateStreak(dates);
+          setCurrentStreak(Math.max(streak, 1));
+          setMotivationalMessage(getRandomMotivationalMessage());
+          setShowCompletion(true);
+        } catch {
+          setCurrentStreak(1);
+          setMotivationalMessage(getRandomMotivationalMessage());
+          setShowCompletion(true);
+        }
       } else {
         Alert.alert('Error', error || 'No se pudo guardar la evidencia. Intenta nuevamente.');
       }
@@ -155,6 +187,9 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Elementos de fondo ambiental y decorativo */}
+      <View style={styles.ambientGlow} />
+
       {/* Círculo gigante café en la inferior del fondo (200% ancho horizontal, centrado, y mitad vertical) */}
       <View
         style={[
@@ -180,12 +215,13 @@ export default function HomeScreen() {
             <ThemedText style={styles.mainTitle}>Hobi</ThemedText>
           </View>
 
-          {/* Personaje Hobi */}
+          {/* Personaje Hobi (versión "fit" cuando la racha supera los 5 días) */}
           <View style={styles.characterContainer}>
             <Image
-              source={require('@/assets/images/hobiCharacter.png')}
+              source={currentStreak > 5 ? HOBI_CHARACTER_FIT : HOBI_CHARACTER}
               style={styles.characterImage}
               contentFit="contain"
+              transition={250}
             />
           </View>
 
@@ -237,6 +273,13 @@ export default function HomeScreen() {
           )}
         </Pressable>
       </View>
+
+      <CompletionSheet
+        visible={showCompletion}
+        message={motivationalMessage}
+        streak={currentStreak}
+        onAccept={() => setShowCompletion(false)}
+      />
     </View>
   );
 }
@@ -244,8 +287,19 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FAF7F2',
     overflow: 'hidden',
+  },
+  ambientGlow: {
+    position: 'absolute',
+    top: 140,
+    alignSelf: 'center',
+    width: 300,
+    height: 300,
+    borderRadius: 150,
+    backgroundColor: '#F3EAE0',
+    opacity: 0.7,
+    zIndex: 0,
   },
   bottomCircle: {
     position: 'absolute',

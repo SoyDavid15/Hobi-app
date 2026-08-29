@@ -1,6 +1,5 @@
 import { Platform, StyleSheet, ScrollView, View, Pressable, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -8,24 +7,26 @@ import { ThemedText } from '@/components/themed-text';
 import { WebBadge } from '@/components/web-badge';
 import { BottomTabInset, MaxContentWidth, Spacing, BorderRadius } from '@/constants/theme';
 import { AuthService } from '@/services/auth';
+import { useLanguage } from '@/context/LanguageContext';
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const [language, setLanguage] = useState<'Español' | 'English'>('Español');
+  const { language, setLanguage, t } = useLanguage();
 
   const handleSignOut = () => {
+    const msg = t('signOutConfirm');
     if (Platform.OS === 'web') {
-      if (window.confirm('¿Estás seguro de que deseas cerrar sesión?')) {
+      if (window.confirm(msg)) {
         AuthService.signOut();
       }
     } else {
       Alert.alert(
-        'Cerrar sesión',
-        '¿Estás seguro de que deseas cerrar sesión?',
+        t('signOut'),
+        msg,
         [
-          { text: 'Cancelar', style: 'cancel' },
+          { text: t('cancel'), style: 'cancel' },
           {
-            text: 'Cerrar sesión',
+            text: t('signOut'),
             style: 'destructive',
             onPress: () => AuthService.signOut(),
           },
@@ -36,19 +37,19 @@ export default function SettingsScreen() {
   };
 
   const handleDeleteAccount = () => {
-    const message = 'Esta acción es permanente y eliminará todos tus datos. ¿Estás seguro de que deseas eliminar tu cuenta?';
+    const message = t('deleteAccountConfirm');
     if (Platform.OS === 'web') {
       if (window.confirm(message)) {
         AuthService.signOut();
       }
     } else {
       Alert.alert(
-        'Eliminar cuenta',
+        t('deleteAccount'),
         message,
         [
-          { text: 'Cancelar', style: 'cancel' },
+          { text: t('cancel'), style: 'cancel' },
           {
-            text: 'Eliminar',
+            text: t('delete'),
             style: 'destructive',
             onPress: () => {
               AuthService.signOut();
@@ -61,8 +62,11 @@ export default function SettingsScreen() {
   };
 
   const toggleLanguage = () => {
-    setLanguage(prev => (prev === 'Español' ? 'English' : 'Español'));
+    const nextLang = language === 'es' ? 'en' : 'es';
+    setLanguage(nextLang);
   };
+
+  const languageLabel = language === 'es' ? 'Español' : 'English';
 
   return (
     <ScrollView
@@ -76,16 +80,16 @@ export default function SettingsScreen() {
             style={({ pressed }) => [styles.backButton, { opacity: pressed ? 0.7 : 1 }]}
             onPress={() => router.back()}>
             <Ionicons name="arrow-back" size={18} color="#6F4E37" />
-            <ThemedText style={styles.backButtonText}>Volver</ThemedText>
+            <ThemedText style={styles.backButtonText}>{t('back')}</ThemedText>
           </Pressable>
-          <ThemedText style={styles.mainTitle}>Ajustes</ThemedText>
+          <ThemedText style={styles.mainTitle}>{t('settingsTitle')}</ThemedText>
         </View>
 
         {/* Tarjeta de Preferencias */}
         <View style={styles.card}>
           <View style={styles.cardHeaderRow}>
             <Ionicons name="options-outline" size={18} color="#6F4E37" />
-            <ThemedText style={styles.sectionHeader}>Preferencias</ThemedText>
+            <ThemedText style={styles.sectionHeader}>{t('preferences')}</ThemedText>
           </View>
           <Pressable
             style={({ pressed }) => [styles.row, { opacity: pressed ? 0.7 : 1 }]}
@@ -95,12 +99,12 @@ export default function SettingsScreen() {
                 <Ionicons name="globe-outline" size={20} color="#6F4E37" />
               </View>
               <View style={styles.rowLabelContainer}>
-                <ThemedText style={styles.rowLabel}>Idioma</ThemedText>
-                <ThemedText style={styles.rowSubLabel}>Idioma actual de la app</ThemedText>
+                <ThemedText style={styles.rowLabel}>{t('language')}</ThemedText>
+                <ThemedText style={styles.rowSubLabel}>{t('currentLangDesc')}</ThemedText>
               </View>
             </View>
             <View style={styles.languageBadge}>
-              <ThemedText style={styles.languageBadgeText}>{language}</ThemedText>
+              <ThemedText style={styles.languageBadgeText}>{languageLabel}</ThemedText>
               <Ionicons name="chevron-forward" size={14} color="#6F4E37" />
             </View>
           </Pressable>
@@ -116,12 +120,12 @@ export default function SettingsScreen() {
                 <Ionicons name="heart-outline" size={20} color="#6F4E37" />
               </View>
               <View style={styles.rowLabelContainer}>
-                <ThemedText style={styles.rowLabel}>Hobbies</ThemedText>
-                <ThemedText style={styles.rowSubLabel}>Elige tus pasatiempos favoritos</ThemedText>
+                <ThemedText style={styles.rowLabel}>{t('hobbiesSetting')}</ThemedText>
+                <ThemedText style={styles.rowSubLabel}>{t('hobbiesSettingDesc')}</ThemedText>
               </View>
             </View>
             <View style={styles.languageBadge}>
-              <ThemedText style={styles.languageBadgeText}>Gestionar</ThemedText>
+              <ThemedText style={styles.languageBadgeText}>{t('manage')}</ThemedText>
               <Ionicons name="chevron-forward" size={14} color="#6F4E37" />
             </View>
           </Pressable>
@@ -131,21 +135,21 @@ export default function SettingsScreen() {
         <View style={styles.card}>
           <View style={styles.cardHeaderRow}>
             <Ionicons name="person-outline" size={18} color="#6F4E37" />
-            <ThemedText style={styles.sectionHeader}>Cuenta</ThemedText>
+            <ThemedText style={styles.sectionHeader}>{t('account')}</ThemedText>
           </View>
           
           <Pressable
             style={({ pressed }) => [styles.signOutButton, { opacity: pressed ? 0.85 : 1 }]}
             onPress={handleSignOut}>
             <Ionicons name="log-out-outline" size={18} color="#6F4E37" />
-            <ThemedText style={styles.signOutButtonText}>Cerrar sesión</ThemedText>
+            <ThemedText style={styles.signOutButtonText}>{t('signOut')}</ThemedText>
           </Pressable>
 
           <Pressable
             style={({ pressed }) => [styles.deleteButton, { opacity: pressed ? 0.85 : 1 }]}
             onPress={handleDeleteAccount}>
             <Ionicons name="trash-outline" size={18} color="#D32F2F" />
-            <ThemedText style={styles.deleteButtonText}>Eliminar cuenta</ThemedText>
+            <ThemedText style={styles.deleteButtonText}>{t('deleteAccount')}</ThemedText>
           </Pressable>
         </View>
 

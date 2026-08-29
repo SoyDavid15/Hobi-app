@@ -25,13 +25,18 @@ export const AuthService = {
   },
 
   /**
-   * Registrar un nuevo usuario con correo y contraseña
+   * Registrar un nuevo usuario con correo, contraseña y nombre de usuario (máx 8 caracteres)
    */
-  async signUp(email: string, pass: string) {
+  async signUp(email: string, pass: string, username: string) {
     try {
       const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
         password: pass,
+        options: {
+          data: {
+            username: username.trim(),
+          },
+        },
       });
 
       if (error) throw error;

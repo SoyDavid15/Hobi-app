@@ -198,7 +198,7 @@ export const ChallengeService = {
     photoBase64?: string | null,
     challengeDate?: string,
     challengeText?: string | null
-  ): Promise<{ success: boolean; photoUrl: string | null; error: string | null }> {
+  ): Promise<{ success: boolean; photoUrl: string | null; feedback?: string | null; error: string | null }> {
     try {
       const user = await getCurrentUser();
       if (!user) {
@@ -215,8 +215,40 @@ export const ChallengeService = {
       }
 
       const completedAt = new Date().toISOString();
+      let aiFeedback: string | null = null;
 
-      // 2. Buscar si ya existe una fila para este usuario y fecha/período
+      // 2. Enviar al Backend API para verificación por IA
+      const token = await getAccessToken();
+      if (token) {
+        try {
+          const res = await fetch(`${API_URL}/challenges/complete`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              photo_url: photoUrl,
+              challenge_date: today,
+              period: period,
+            }),
+          });
+
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            const errorMsg = body.detail || 'La foto no cumple con el reto indicado por la IA.';
+            return { success: false, photoUrl: null, error: errorMsg };
+          }
+
+          const responseData = await res.json();
+          aiFeedback = responseData.feedback || null;
+        } catch (apiErr: any) {
+          // Si hay error de red con el backend, permitimos continuar localmente pero con advertencia
+          console.warn('Backend AI verification notice:', apiErr);
+        }
+      }
+
+      // 3. Guardar/Actualizar en Supabase DB local
       const { data: existingRows } = await supabase
         .from('daily_challenges')
         .select('id, challenge, period, challenge_date')
@@ -227,7 +259,6 @@ export const ChallengeService = {
       let dbSaved = false;
 
       if (existingRows && existingRows.length > 0) {
-        // Actualizar la fila existente por su ID
         const targetId = existingRows[0].id;
         const { error: updateErr } = await supabase
           .from('daily_challenges')
@@ -242,7 +273,6 @@ export const ChallengeService = {
       }
 
       if (!dbSaved) {
-        // Intentar actualizar cualquier fila de hoy para el usuario
         const { data: todayRows } = await supabase
           .from('daily_challenges')
           .select('id')
@@ -265,7 +295,6 @@ export const ChallengeService = {
       }
 
       if (!dbSaved) {
-        // Si aún no existe la fila, insertarla directamente
         const { error: insertErr } = await supabase
           .from('daily_challenges')
           .insert({
@@ -282,28 +311,7 @@ export const ChallengeService = {
         if (!insertErr) dbSaved = true;
       }
 
-      // 3. Sincronizar siempre con el backend vía supabase_admin para máxima consistencia
-      const token = await getAccessToken();
-      if (token) {
-        try {
-          await fetch(`${API_URL}/challenges/complete`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              photo_url: photoUrl,
-              challenge_date: today,
-              period: period,
-            }),
-          });
-        } catch (apiErr) {
-          console.warn('Backend sync notice:', apiErr);
-        }
-      }
-
-      return { success: true, photoUrl, error: null };
+      return { success: true, photoUrl, feedback: aiFeedback, error: null };
     } catch (err: any) {
       return { success: false, photoUrl: null, error: err.message || 'Error al completar el reto' };
     }
@@ -429,6 +437,27 @@ export const ChallengeService = {
       return { challenges: list, error: null };
     } catch (err: any) {
       return { challenges: [], error: err.message || 'Error al obtener historial de retos' };
+    }
+  },
+
+  /**
+   * Obtener lista de fechas con retos completados para cálculo rápido de racha.
+   */
+  async getCompletedDates(): Promise<string[]> {
+    try {
+      const user = await getCurrentUser();
+      if (!user) return [];
+
+      const { data, error } = await supabase
+        .from('daily_challenges')
+        .select('challenge_date')
+        .eq('user_id', user.id)
+        .eq('is_completed', true);
+
+      if (error || !data) return [];
+      return Array.from(new Set(data.map((row: any) => row.challenge_date)));
+    } catch {
+      return [];
     }
   },
 };
