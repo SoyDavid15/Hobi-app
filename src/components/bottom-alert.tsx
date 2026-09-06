@@ -11,19 +11,29 @@ import { Ionicons } from '@expo/vector-icons';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing, BorderRadius } from '@/constants/theme';
 
-interface CompletionSheetProps {
-  visible: boolean;
-  message: string;
-  streak: number;
-  onAccept: () => void;
+export interface AlertButton {
+  text: string;
+  onPress?: () => void;
+  style?: 'default' | 'cancel' | 'destructive';
 }
 
-export function CompletionSheet({
+interface BottomAlertProps {
+  visible: boolean;
+  title: string;
+  message: string;
+  type?: 'success' | 'error' | 'info' | 'warning';
+  buttons?: AlertButton[];
+  onDismiss: () => void;
+}
+
+export function BottomAlert({
   visible,
+  title,
   message,
-  streak,
-  onAccept,
-}: CompletionSheetProps) {
+  type = 'info',
+  buttons,
+  onDismiss,
+}: BottomAlertProps) {
   const [slideAnim] = useState(() => new Animated.Value(300));
   const [fadeAnim] = useState(() => new Animated.Value(0));
 
@@ -59,14 +69,37 @@ export function CompletionSheet({
 
   if (!visible) return null;
 
+  const getIconConfig = () => {
+    switch (type) {
+      case 'success':
+        return { name: 'checkmark-circle' as const, color: '#2E7D32', bg: '#E8F5E9', border: '#C8E6C9' };
+      case 'error':
+        return { name: 'alert-circle' as const, color: '#C63D0F', bg: '#FFEBEE', border: '#FFCDD2' };
+      case 'warning':
+        return { name: 'warning' as const, color: '#E65100', bg: '#FFF3E0', border: '#FFE0B2' };
+      default:
+        return { name: 'information-circle' as const, color: '#6F4E37', bg: '#F3EAE0', border: '#E2D3C3' };
+    }
+  };
+
+  const iconConfig = getIconConfig();
+
+  const resolvedButtons = buttons && buttons.length > 0 ? buttons : [
+    {
+      text: 'Aceptar',
+      onPress: onDismiss,
+      style: 'default' as const,
+    },
+  ];
+
   return (
     <Modal
       visible={visible}
       transparent={true}
       animationType="none"
-      onRequestClose={onAccept}>
+      onRequestClose={onDismiss}>
       <View style={styles.modalOverlay}>
-        <Pressable style={styles.backdropPressable} onPress={onAccept} />
+        <Pressable style={styles.backdropPressable} onPress={onDismiss} />
 
         <Animated.View
           style={[
@@ -80,34 +113,48 @@ export function CompletionSheet({
           <SafeAreaView edges={['bottom']} style={styles.safeArea}>
             <View style={styles.indicatorBar} />
 
-            {/* Icono de éxito */}
-            <View style={styles.iconCircle}>
-              <Ionicons name="checkmark" size={28} color="#6F4E37" />
+            <View style={[styles.iconCircle, { backgroundColor: iconConfig.bg, borderColor: iconConfig.border }]}>
+              <Ionicons name={iconConfig.name} size={30} color={iconConfig.color} />
             </View>
 
-            {/* Título */}
-            <ThemedText style={styles.title}>¡Reto completado! 🎉</ThemedText>
+            <ThemedText style={styles.title}>{title}</ThemedText>
 
-            {/* Insignia de Racha */}
-            <View style={styles.streakBadge}>
-              <Ionicons name="flame" size={16} color="#FF5722" />
-              <ThemedText style={styles.streakText}>
-                {streak === 1 ? '¡Llevas 1 día de racha!' : `¡Llevas ${streak} días de racha!`}
-              </ThemedText>
+            <ThemedText style={styles.message}>{message}</ThemedText>
+
+            <View style={styles.buttonContainer}>
+              {resolvedButtons.map((btn, index) => {
+                const isDestructive = btn.style === 'destructive';
+                const isCancel = btn.style === 'cancel';
+
+                return (
+                  <Pressable
+                    key={index}
+                    style={({ pressed }) => [
+                      styles.button,
+                      resolvedButtons.length > 1 ? styles.buttonHalf : styles.buttonFull,
+                      isDestructive && styles.destructiveButton,
+                      isCancel && styles.cancelButton,
+                      { opacity: pressed ? 0.85 : 1 },
+                    ]}
+                    onPress={() => {
+                      if (btn.onPress) {
+                        btn.onPress();
+                      } else {
+                        onDismiss();
+                      }
+                    }}>
+                    <ThemedText
+                      style={[
+                        styles.buttonText,
+                        isDestructive && styles.destructiveButtonText,
+                        isCancel && styles.cancelButtonText,
+                      ]}>
+                      {btn.text}
+                    </ThemedText>
+                  </Pressable>
+                );
+              })}
             </View>
-
-            {/* Mensaje motivacional */}
-            <ThemedText style={styles.motivationalMessage}>{message}</ThemedText>
-
-            {/* Botón Aceptar */}
-            <Pressable
-              style={({ pressed }) => [
-                styles.acceptButton,
-                { opacity: pressed ? 0.85 : 1 },
-              ]}
-              onPress={onAccept}>
-              <ThemedText style={styles.acceptButtonText}>Aceptar</ThemedText>
-            </Pressable>
           </SafeAreaView>
         </Animated.View>
       </View>
@@ -157,39 +204,22 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
   },
   iconCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#F3EAE0',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: Spacing.half,
     borderWidth: 1.5,
-    borderColor: '#E2D3C3',
   },
   title: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '800',
     color: '#1F1F1F',
     textAlign: 'center',
     letterSpacing: -0.5,
   },
-  streakBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#FFD8CC',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.half + 2,
-    borderRadius: BorderRadius.full,
-    marginVertical: Spacing.half,
-  },
-  streakText: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#C63D0F',
-  },
-  motivationalMessage: {
+  message: {
     fontSize: 15,
     color: '#6B655E',
     textAlign: 'center',
@@ -198,22 +228,47 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.two,
     marginBottom: Spacing.two,
   },
-  acceptButton: {
+  buttonContainer: {
+    flexDirection: 'row',
     width: '100%',
-    backgroundColor: '#6F4E37',
+    gap: Spacing.two,
+    marginTop: Spacing.half,
+  },
+  button: {
     paddingVertical: Spacing.three,
     borderRadius: BorderRadius.full,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#6F4E37',
     shadowColor: '#6F4E37',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 4,
   },
-  acceptButtonText: {
+  buttonFull: {
+    flex: 1,
+  },
+  buttonHalf: {
+    flex: 1,
+  },
+  cancelButton: {
+    backgroundColor: '#EAE6E1',
+    shadowColor: 'transparent',
+  },
+  destructiveButton: {
+    backgroundColor: '#D32F2F',
+    shadowColor: '#D32F2F',
+  },
+  buttonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
+  },
+  cancelButtonText: {
+    color: '#4A453F',
+  },
+  destructiveButtonText: {
+    color: '#FFFFFF',
   },
 });

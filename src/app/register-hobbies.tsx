@@ -1,4 +1,4 @@
-import { Platform, StyleSheet, ScrollView, View, Pressable, Alert } from 'react-native';
+import { Platform, StyleSheet, ScrollView, View, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
@@ -8,6 +8,7 @@ import { ThemedText } from '@/components/themed-text';
 import { WebBadge } from '@/components/web-badge';
 import { MaxContentWidth, Spacing, BorderRadius } from '@/constants/theme';
 import { HobbyService } from '@/services/hobbies';
+import { useAlert } from '@/context/AlertContext';
 
 const HOBBIES = [
   { id: 'Musica', label: 'Música', icon: 'musical-notes-outline', desc: 'Retos de canto, instrumentos y audio' },
@@ -21,6 +22,7 @@ const HOBBIES = [
 export default function RegisterHobbiesScreen() {
   const router = useRouter();
   const [selectedHobbies, setSelectedHobbies] = useState<string[]>(['Musica', 'Lectura']);
+  const { showAlert } = useAlert();
 
   const toggleHobby = (hobbyId: string) => {
     setSelectedHobbies(prev =>
@@ -30,33 +32,39 @@ export default function RegisterHobbiesScreen() {
 
   const handleCompleteRegistration = async () => {
     if (selectedHobbies.length === 0) {
-      Alert.alert('Atención', 'Por favor selecciona al menos un hobby para continuar.');
+      showAlert({
+        title: 'Atención',
+        message: 'Por favor selecciona al menos un hobby para continuar.',
+        type: 'warning',
+      });
       return;
     }
 
     for (const hobbyId of selectedHobbies) {
       const result = await HobbyService.addHobby(hobbyId);
       if (result.error) {
-        Alert.alert(
-          'Error',
-          result.error === 'No hay sesión activa'
+        showAlert({
+          title: 'Error',
+          message: result.error === 'No hay sesión activa'
             ? 'Debes verificar tu correo e iniciar sesión antes de guardar tus hobbies.'
-            : result.error
-        );
+            : result.error,
+          type: 'error',
+        });
         return;
       }
     }
 
-    if (Platform.OS === 'web') {
-      window.alert('¡Cuenta creada y hobbies guardados exitosamente!');
-      router.replace('/auth');
-    } else {
-      Alert.alert(
-        '¡Todo listo!',
-        'Tus hobbies han sido guardados. Revisa tu correo para verificar tu cuenta e iniciar sesión.',
-        [{ text: 'Continuar', onPress: () => router.replace('/auth') }]
-      );
-    }
+    showAlert({
+      title: '¡Todo listo!',
+      message: 'Tus hobbies han sido guardados. Revisa tu correo para verificar tu cuenta e iniciar sesión.',
+      type: 'success',
+      buttons: [
+        {
+          text: 'Continuar',
+          onPress: () => router.replace('/auth'),
+        },
+      ],
+    });
   };
 
   return (

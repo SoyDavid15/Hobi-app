@@ -82,6 +82,15 @@ La aplicación ofrece **2 retos diarios** que cambian automáticamente según la
 
 ## 5. Registro de Cambios (Changelog)
 
+### [2026-08-26] - Pantalla Hobi, Amigos por Código Único y Batallas de Grupos (Eliminación por Racha)
+- **Autor:** IA (OpenCode)
+- **Cambios:**
+  - **Base de Datos (Supabase):** Creación de migración `0006_friends_and_groups.sql` con tabla `profiles` (generación automática de `friend_code` único por trigger), tabla `friendships` (solicitudes y amigos aceptados), tabla `groups` y tabla `group_members` con políticas RLS estrictas.
+  - **Backend (FastAPI):** Nuevos endpoints en `Backend/social.py`: `GET /profile`, `GET /friends`, `POST /friends/add`, `POST /friends/respond`, `POST /groups` (creación de grupos con mínimo 2 participantes) y `GET /groups` (con evaluación automática de rachas desde la creación del grupo para eliminar a quienes rompan su racha hasta coronar a 1 ganador).
+  - **Frontend (Expo Router):**
+    - Nueva pantalla `src/app/hobi.tsx` con pestañas para **Amigos** (copiar código propio, agregar amigo por código y aceptar solicitudes) y **Batallas de Retos** (crear grupo seleccionando amigos, ver estado activo/eliminado de cada participante y ganador).
+    - Inclusión de la pestaña **"Hobi"** en la barra de navegación inferior (`src/components/app-tabs.tsx`) con icono de trofeo.
+
 ### [2026-08-25] - Personaje "Fit" al Superar 5 Días de Racha
 - **Autor:** IA (OpenCode)
 - **Cambios:**

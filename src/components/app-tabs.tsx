@@ -32,6 +32,15 @@ export default function AppTabs() {
         }}
       />
       <Tabs.Screen
+        name="hobi"
+        options={{
+          title: 'Hobi',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'trophy' : 'trophy-outline'} size={24} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: 'Perfil',

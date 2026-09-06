@@ -1,4 +1,4 @@
-import { Platform, StyleSheet, ScrollView, View, Pressable, Alert } from 'react-native';
+import { Platform, StyleSheet, ScrollView, View, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
@@ -8,6 +8,7 @@ import { ThemedText } from '@/components/themed-text';
 import { WebBadge } from '@/components/web-badge';
 import { MaxContentWidth, Spacing, BorderRadius } from '@/constants/theme';
 import { HobbyService } from '@/services/hobbies';
+import { useAlert } from '@/context/AlertContext';
 
 const HOBBIES = [
   { id: 'Musica', label: 'Música', icon: 'musical-notes-outline', desc: 'Retos de canto, instrumentos y audio' },
@@ -23,6 +24,7 @@ export default function HobbiesScreen() {
   const [selectedHobbies, setSelectedHobbies] = useState<string[]>(['Musica', 'Lectura']);
   const [saving, setSaving] = useState(false);
   const initialHobbiesRef = useRef<string[]>(['Musica', 'Lectura']);
+  const { showAlert } = useAlert();
 
   useEffect(() => {
     let active = true;
@@ -69,26 +71,27 @@ export default function HobbiesScreen() {
 
     if (firstError) {
       const message = `No se pudieron guardar todos los hobbies: ${firstError}`;
-      if (Platform.OS === 'web') {
-        window.alert(message);
-      } else {
-        Alert.alert('Error', message);
-      }
+      showAlert({
+        title: 'Error',
+        message,
+        type: 'error',
+      });
       return;
     }
 
     initialHobbiesRef.current = selectedHobbies;
 
-    if (Platform.OS === 'web') {
-      window.alert('¡Hobbies guardados exitosamente!');
-      router.back();
-    } else {
-      Alert.alert(
-        'Guardado',
-        'Tus hobbies han sido actualizados exitosamente.',
-        [{ text: 'OK', onPress: () => router.back() }]
-      );
-    }
+    showAlert({
+      title: 'Guardado',
+      message: 'Tus hobbies han sido actualizados exitosamente.',
+      type: 'success',
+      buttons: [
+        {
+          text: 'OK',
+          onPress: () => router.back(),
+        },
+      ],
+    });
   };
 
   return (

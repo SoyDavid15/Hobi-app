@@ -1,4 +1,4 @@
-import { Platform, StyleSheet, ScrollView, View, Pressable, useWindowDimensions, Alert, ActivityIndicator, AppState } from 'react-native';
+import { Platform, StyleSheet, ScrollView, View, Pressable, useWindowDimensions, ActivityIndicator, AppState } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { Image } from 'expo-image';
@@ -12,6 +12,7 @@ import { MaxContentWidth, Spacing, BorderRadius } from '@/constants/theme';
 import { ChallengeService, getCurrentSlot, type ChallengePeriod } from '@/services/challenges';
 import { calculateStreak } from '@/lib/streak';
 import { getRandomMotivationalMessage } from '@/lib/motivation';
+import { useAlert } from '@/context/AlertContext';
 
 const HOBI_CHARACTER = require('@/assets/images/hobiCharacter.png');
 const HOBI_CHARACTER_FIT = require('@/assets/images/hobiCharacterFit.png');
@@ -27,6 +28,7 @@ export default function HomeScreen() {
   const [currentStreak, setCurrentStreak] = useState(0);
   const lastSlotRef = useRef<string>('');
   const { width, height } = useWindowDimensions();
+  const { showAlert } = useAlert();
 
   const loadChallenge = useCallback(async () => {
     const { date: slotDate, period: slotPeriod } = getCurrentSlot();
@@ -110,10 +112,11 @@ export default function HomeScreen() {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert(
-          'Permiso requerido',
-          'Se necesita acceso a la cámara para tomar la foto de tu reto diario.'
-        );
+        showAlert({
+          title: 'Permiso requerido',
+          message: 'Se necesita acceso a la cámara para tomar la foto de tu reto diario.',
+          type: 'warning',
+        });
         return;
       }
 
@@ -156,10 +159,18 @@ export default function HomeScreen() {
           setShowCompletion(true);
         }
       } else {
-        Alert.alert('Error', error || 'No se pudo guardar la evidencia. Intenta nuevamente.');
+        showAlert({
+          title: 'Verificación de IA',
+          message: error || 'La foto no cumple con el reto indicado por la IA. Inténtalo de nuevo.',
+          type: 'error',
+        });
       }
     } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Ocurrió un problema al procesar la foto.');
+      showAlert({
+        title: 'Error',
+        message: err?.message || 'Ocurrió un problema al procesar la foto.',
+        type: 'error',
+      });
     } finally {
       setSubmitting(false);
     }
@@ -177,7 +188,11 @@ export default function HomeScreen() {
 
   const handlePressHecho = () => {
     if (completed) {
-      Alert.alert('¡Reto completado!', `Ya registraste tu evidencia del turno de la ${periodLabel.toLowerCase()}. ¡Bien hecho!`);
+      showAlert({
+        title: '¡Reto completado!',
+        message: `Ya registraste tu evidencia del turno de la ${periodLabel.toLowerCase()}. ¡Bien hecho!`,
+        type: 'success',
+      });
       return;
     }
     if (submitting || !challengeReady) return;

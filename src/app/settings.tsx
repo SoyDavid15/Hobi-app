@@ -1,4 +1,4 @@
-import { Platform, StyleSheet, ScrollView, View, Pressable, Alert } from 'react-native';
+import { Platform, StyleSheet, ScrollView, View, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,10 +8,12 @@ import { WebBadge } from '@/components/web-badge';
 import { BottomTabInset, MaxContentWidth, Spacing, BorderRadius } from '@/constants/theme';
 import { AuthService } from '@/services/auth';
 import { useLanguage } from '@/context/LanguageContext';
+import { useAlert } from '@/context/AlertContext';
 
 export default function SettingsScreen() {
   const router = useRouter();
   const { language, setLanguage, t } = useLanguage();
+  const { showAlert } = useAlert();
 
   const handleSignOut = () => {
     const msg = t('signOutConfirm');
@@ -20,10 +22,11 @@ export default function SettingsScreen() {
         AuthService.signOut();
       }
     } else {
-      Alert.alert(
-        t('signOut'),
-        msg,
-        [
+      showAlert({
+        title: t('signOut'),
+        message: msg,
+        type: 'warning',
+        buttons: [
           { text: t('cancel'), style: 'cancel' },
           {
             text: t('signOut'),
@@ -31,8 +34,7 @@ export default function SettingsScreen() {
             onPress: () => AuthService.signOut(),
           },
         ],
-        { cancelable: true }
-      );
+      });
     }
   };
 
@@ -43,10 +45,11 @@ export default function SettingsScreen() {
         AuthService.signOut();
       }
     } else {
-      Alert.alert(
-        t('deleteAccount'),
+      showAlert({
+        title: t('deleteAccount'),
         message,
-        [
+        type: 'error',
+        buttons: [
           { text: t('cancel'), style: 'cancel' },
           {
             text: t('delete'),
@@ -56,8 +59,7 @@ export default function SettingsScreen() {
             },
           },
         ],
-        { cancelable: true }
-      );
+      });
     }
   };
 
