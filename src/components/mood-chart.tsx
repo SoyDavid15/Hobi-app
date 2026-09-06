@@ -8,7 +8,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { ThemedText } from '@/components/themed-text';
 import { BorderRadius, Spacing } from '@/constants/theme';
-import { MoodEntry, MoodId, MoodStats, TimeRange } from '@/types/mood';
+import { MoodEntry, MoodStats, TimeRange } from '@/types/mood';
 import { MOOD_MAP, MOOD_OPTIONS } from '@/constants/moods';
 
 interface MoodChartProps {
@@ -26,8 +26,8 @@ export function MoodChart({
 }: MoodChartProps) {
   const [selectedBarIndex, setSelectedBarIndex] = useState<number | null>(null);
 
+  const hasData = stats.totalLogs > 0;
   const dominantMoodObj = stats.dominantMood ? MOOD_MAP[stats.dominantMood] : null;
-
   const maxChartHeight = 140;
 
   return (
@@ -90,8 +90,12 @@ export function MoodChart({
             <Ionicons name="sparkles" size={14} color="#6F4E37" />
             <ThemedText style={styles.metricLabel}>Positividad</ThemedText>
           </View>
-          <ThemedText style={styles.metricValue}>{stats.positivityRate}%</ThemedText>
-          <ThemedText style={styles.metricSub}>Días positivos</ThemedText>
+          <ThemedText style={styles.metricValue}>
+            {hasData ? `${stats.positivityRate}%` : '0%'}
+          </ThemedText>
+          <ThemedText style={styles.metricSub}>
+            {hasData ? 'Días positivos' : 'Sin datos'}
+          </ThemedText>
         </View>
 
         <View style={styles.metricCard}>
@@ -113,7 +117,9 @@ export function MoodChart({
           <ThemedText style={styles.metricValue}>
             {dominantMoodObj ? `${dominantMoodObj.emoji} ${dominantMoodObj.label}` : '—'}
           </ThemedText>
-          <ThemedText style={styles.metricSub}>Estado dominante</ThemedText>
+          <ThemedText style={styles.metricSub}>
+            {dominantMoodObj ? 'Estado dominante' : 'Sin registros'}
+          </ThemedText>
         </View>
       </View>
 
@@ -128,117 +134,125 @@ export function MoodChart({
               {selectedRange === 'all' && 'Historial Completo'}
             </ThemedText>
             <ThemedText style={styles.chartSubtitle}>
-              Promedio: {stats.averageScore > 0 ? `${stats.averageScore}/5.0` : 'Sin datos'}
+              {hasData ? `Promedio: ${stats.averageScore}/5.0` : 'Sin registros para este período'}
             </ThemedText>
           </View>
-          <View style={styles.chartLegend}>
-            <View style={[styles.legendDot, { backgroundColor: '#10B981' }]} />
-            <ThemedText style={styles.legendText}>Excelente</ThemedText>
-            <View style={[styles.legendDot, { backgroundColor: '#3B82F6' }]} />
-            <ThemedText style={styles.legendText}>Bien</ThemedText>
-            <View style={[styles.legendDot, { backgroundColor: '#F59E0B' }]} />
-            <ThemedText style={styles.legendText}>Bajo</ThemedText>
-          </View>
+          {hasData && (
+            <View style={styles.chartLegend}>
+              <View style={[styles.legendDot, { backgroundColor: '#10B981' }]} />
+              <ThemedText style={styles.legendText}>Excelente</ThemedText>
+              <View style={[styles.legendDot, { backgroundColor: '#3B82F6' }]} />
+              <ThemedText style={styles.legendText}>Bien</ThemedText>
+              <View style={[styles.legendDot, { backgroundColor: '#F59E0B' }]} />
+              <ThemedText style={styles.legendText}>Bajo</ThemedText>
+            </View>
+          )}
         </View>
 
-        {/* Líneas guía de fondo */}
-        <View style={styles.barsContainerWrapper}>
-          <View style={styles.gridLinesContainer}>
-            <View style={styles.gridLine} />
-            <View style={styles.gridLine} />
-            <View style={styles.gridLine} />
-            <View style={styles.gridLine} />
+        {!hasData && (selectedRange === 'all' || stats.trendData.every((t) => t.score === 0)) ? (
+          <View style={styles.emptyChartBox}>
+            <Ionicons name="bar-chart-outline" size={36} color="#A0A0A5" />
+            <ThemedText style={styles.emptyChartTitle}>No hay datos registrados aún</ThemedText>
+            <ThemedText style={styles.emptyChartSubtitle}>
+              Selecciona tu estado de ánimo arriba para comenzar a construir tus estadísticas.
+            </ThemedText>
           </View>
+        ) : (
+          /* Líneas guía y barras dinámicas */
+          <View style={styles.barsContainerWrapper}>
+            <View style={styles.gridLinesContainer}>
+              <View style={styles.gridLine} />
+              <View style={styles.gridLine} />
+              <View style={styles.gridLine} />
+              <View style={styles.gridLine} />
+            </View>
 
-          {/* Barras dinámicas */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.barsScrollView}>
-            {stats.trendData.map((item, index) => {
-              const isSelected = selectedBarIndex === index;
-              const hasScore = item.score > 0;
-              const heightPercent = hasScore ? Math.min(100, Math.max(18, (item.score / 5) * 100)) : 8;
-              const barHeight = (heightPercent / 100) * maxChartHeight;
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.barsScrollView}>
+              {stats.trendData.map((item, index) => {
+                const isSelected = selectedBarIndex === index;
+                const hasScore = item.score > 0;
+                const heightPercent = hasScore ? Math.min(100, Math.max(18, (item.score / 5) * 100)) : 6;
+                const barHeight = (heightPercent / 100) * maxChartHeight;
 
-              // Color determination
-              let barColor = '#EAE6E1';
-              if (item.moodId && MOOD_MAP[item.moodId]) {
-                barColor = MOOD_MAP[item.moodId].color;
-              } else if (item.score >= 4.0) {
-                barColor = '#10B981';
-              } else if (item.score >= 3.0) {
-                barColor = '#3B82F6';
-              } else if (item.score >= 2.0) {
-                barColor = '#F59E0B';
-              } else if (item.score > 0) {
-                barColor = '#EF4444';
-              }
+                let barColor = '#EAE6E1';
+                if (item.moodId && MOOD_MAP[item.moodId]) {
+                  barColor = MOOD_MAP[item.moodId].color;
+                } else if (item.score >= 4.0) {
+                  barColor = '#10B981';
+                } else if (item.score >= 3.0) {
+                  barColor = '#3B82F6';
+                } else if (item.score >= 2.0) {
+                  barColor = '#F59E0B';
+                } else if (item.score > 0) {
+                  barColor = '#EF4444';
+                }
 
-              return (
-                <Pressable
-                  key={`bar-${item.label}-${index}`}
-                  style={[styles.barCol, isSelected && styles.barColActive]}
-                  onPress={() => setSelectedBarIndex(isSelected ? null : index)}>
-                  {/* Tooltip flotante al tocar una barra */}
-                  {isSelected && (
-                    <View style={styles.tooltip}>
-                      <ThemedText style={styles.tooltipText}>
-                        {item.moodId && MOOD_MAP[item.moodId]
-                          ? `${MOOD_MAP[item.moodId].emoji} ${MOOD_MAP[item.moodId].label}`
-                          : item.score > 0
-                          ? `⭐ ${item.score}/5`
-                          : 'Sin registro'}
-                      </ThemedText>
-                    </View>
-                  )}
-
-                  {/* Icono de emoji superior en vista semanal */}
-                  <View style={styles.barTopIcon}>
-                    {item.moodId && MOOD_MAP[item.moodId] ? (
-                      <ThemedText style={styles.barEmoji}>
-                        {MOOD_MAP[item.moodId].emoji}
-                      </ThemedText>
-                    ) : hasScore ? (
-                      <ThemedText style={styles.barScoreText}>{item.score}</ThemedText>
-                    ) : (
-                      <View style={styles.barEmptyDot} />
+                return (
+                  <Pressable
+                    key={`bar-${item.label}-${index}`}
+                    style={[styles.barCol, isSelected && styles.barColActive]}
+                    onPress={() => setSelectedBarIndex(isSelected ? null : index)}>
+                    {isSelected && (
+                      <View style={styles.tooltip}>
+                        <ThemedText style={styles.tooltipText}>
+                          {item.moodId && MOOD_MAP[item.moodId]
+                            ? `${MOOD_MAP[item.moodId].emoji} ${MOOD_MAP[item.moodId].label}`
+                            : item.score > 0
+                            ? `⭐ ${item.score}/5`
+                            : 'Sin registro'}
+                        </ThemedText>
+                      </View>
                     )}
-                  </View>
 
-                  {/* La barra visual */}
-                  <View style={styles.barTrack}>
-                    <View
-                      style={[
-                        styles.barFill,
-                        {
-                          height: barHeight,
-                          backgroundColor: barColor,
-                          opacity: hasScore ? (isSelected ? 1 : 0.88) : 0.25,
-                        },
-                      ]}
-                    />
-                  </View>
+                    <View style={styles.barTopIcon}>
+                      {item.moodId && MOOD_MAP[item.moodId] ? (
+                        <ThemedText style={styles.barEmoji}>
+                          {MOOD_MAP[item.moodId].emoji}
+                        </ThemedText>
+                      ) : hasScore ? (
+                        <ThemedText style={styles.barScoreText}>{item.score}</ThemedText>
+                      ) : (
+                        <View style={styles.barEmptyDot} />
+                      )}
+                    </View>
 
-                  {/* Etiquetas inferiores */}
-                  <ThemedText style={[styles.barLabel, isSelected && styles.barLabelActive]}>
-                    {item.label}
-                  </ThemedText>
-                  {item.subLabel ? (
-                    <ThemedText style={styles.barSubLabel}>{item.subLabel}</ThemedText>
-                  ) : null}
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-        </View>
+                    <View style={styles.barTrack}>
+                      <View
+                        style={[
+                          styles.barFill,
+                          {
+                            height: barHeight,
+                            backgroundColor: barColor,
+                            opacity: hasScore ? (isSelected ? 1 : 0.88) : 0.2,
+                          },
+                        ]}
+                      />
+                    </View>
+
+                    <ThemedText style={[styles.barLabel, isSelected && styles.barLabelActive]}>
+                      {item.label}
+                    </ThemedText>
+                    {item.subLabel ? (
+                      <ThemedText style={styles.barSubLabel}>{item.subLabel}</ThemedText>
+                    ) : null}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
       </View>
 
       {/* Desglose de Distribución de Ánimo */}
       <View style={styles.distributionCard}>
         <ThemedText style={styles.distributionTitle}>Distribución de Estados</ThemedText>
         <ThemedText style={styles.distributionSubtitle}>
-          Frecuencia de cada estado de ánimo en este período
+          {hasData
+            ? 'Frecuencia de cada estado de ánimo en este período'
+            : 'Aún no has registrado estados en este período'}
         </ThemedText>
 
         <View style={styles.distributionList}>
@@ -259,7 +273,7 @@ export function MoodChart({
                       styles.distBarFill,
                       {
                         width: `${Math.max(percentage > 0 ? 6 : 0, percentage)}%`,
-                        backgroundColor: mood.color,
+                        backgroundColor: percentage > 0 ? mood.color : '#EAE6E1',
                       },
                     ]}
                   />
@@ -441,6 +455,24 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: '#8E8E93',
     fontWeight: '600',
+  },
+  emptyChartBox: {
+    paddingVertical: Spacing.five,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.one,
+  },
+  emptyChartTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1F1F1F',
+    marginTop: 4,
+  },
+  emptyChartSubtitle: {
+    fontSize: 12,
+    color: '#8E8E93',
+    textAlign: 'center',
+    maxWidth: 280,
   },
   barsContainerWrapper: {
     height: 180,

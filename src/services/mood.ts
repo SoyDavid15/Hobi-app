@@ -45,35 +45,6 @@ function formatDate(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-// Generate realistic historic entries for new users so graphs have depth
-function generateSeedHistory(): MoodEntry[] {
-  const entries: MoodEntry[] = [];
-  const moods: MoodId[] = ['rad', 'good', 'good', 'neutral', 'good', 'rad', 'tired', 'good', 'rad', 'neutral'];
-  const tagsList = [['🎯 Retos', '🏃 Ejercicio'], ['✨ Tiempo libre'], ['💼 Trabajo'], ['🥗 Salud'], ['🎨 Hobbies']];
-  const now = new Date();
-
-  // Create logs spanning back 60 days
-  for (let i = 45; i >= 1; i--) {
-    const d = new Date(now);
-    d.setDate(d.getDate() - i);
-    const dateStr = formatDate(d);
-    const randomMood = moods[(i * 7 + 3) % moods.length];
-    const tags = tagsList[i % tagsList.length];
-
-    entries.push({
-      id: `seed_${dateStr}`,
-      date: dateStr,
-      timestamp: new Date(d.setHours(12, 0, 0, 0)).toISOString(),
-      mood: randomMood,
-      note: i % 4 === 0 ? 'Día productivo y completé mi reto diario' : undefined,
-      tags,
-      energy: Math.min(5, Math.max(1, Math.round(MOOD_MAP[randomMood].score))),
-    });
-  }
-
-  return entries;
-}
-
 export const MoodService = {
   async getAllEntries(): Promise<MoodEntry[]> {
     const userId = await getCurrentUserId();
@@ -83,18 +54,20 @@ export const MoodService = {
     if (raw) {
       try {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+        if (Array.isArray(parsed)) {
+          // Filtrar cualquier dato de prueba anterior para asegurar solo datos reales
+          const realEntries = parsed.filter((e) => !e.id?.startsWith('seed_'));
+          if (realEntries.length !== parsed.length) {
+            await setStorageItem(storageKey, JSON.stringify(realEntries));
+          }
+          return realEntries;
         }
       } catch {
         // fallback
       }
     }
 
-    // Seed initial demo data for smooth experience
-    const seed = generateSeedHistory();
-    await setStorageItem(storageKey, JSON.stringify(seed));
-    return seed;
+    return [];
   },
 
   async getTodayEntry(): Promise<MoodEntry | null> {
@@ -191,7 +164,7 @@ export const MoodService = {
           trendData.push({
             label: dayLabel,
             subLabel: `${day}`,
-            score: MOOD_MAP[entry.mood]?.score || 3,
+            score: MOOD_MAP[entry.mood]?.score || 0,
             moodId: entry.mood,
             date: dateStr,
           });
@@ -205,7 +178,7 @@ export const MoodService = {
         }
       });
     } else if (range === 'month') {
-      // Last 30 days grouped into 4 weekly blocks or 5-day intervals
+      // Last 30 days grouped into 6 slices of 5 days
       const daysCount = 30;
       const startDate = new Date(now);
       startDate.setDate(startDate.getDate() - daysCount);
@@ -218,7 +191,6 @@ export const MoodService = {
         }
       });
 
-      // Divide 30 days into 6 slices of 5 days
       for (let slice = 5; slice >= 0; slice--) {
         const sliceEnd = new Date(now);
         sliceEnd.setDate(sliceEnd.getDate() - slice * 5);
@@ -231,7 +203,7 @@ export const MoodService = {
         const sliceEntries = entries.filter((e) => e.date >= startStrSlice && e.date <= endStrSlice);
         const avgScore =
           sliceEntries.length > 0
-            ? sliceEntries.reduce((acc, curr) => acc + (MOOD_MAP[curr.mood]?.score || 3), 0) /
+            ? sliceEntries.reduce((acc, curr) => acc + (MOOD_MAP[curr.mood]?.score || 0), 0) /
               sliceEntries.length
             : 0;
 
@@ -261,7 +233,7 @@ export const MoodService = {
 
         const avgScore =
           monthEntries.length > 0
-            ? monthEntries.reduce((acc, curr) => acc + (MOOD_MAP[curr.mood]?.score || 3), 0) /
+            ? monthEntries.reduce((acc, curr) => acc + (MOOD_MAP[curr.mood]?.score || 0), 0) /
               monthEntries.length
             : 0;
 
@@ -280,55 +252,52 @@ export const MoodService = {
         }
       });
 
-      // Group by months for all available entries
-      const monthMap = new Map<string, MoodEntry[]>();
-      entries.forEach((e) => {
-        const key = e.date.substring(0, 7); // YYYY-MM
-        if (!monthMap.has(key)) {
-          monthMap.set(key, []);
-        }
-        monthMap.get(key)!.push(e);
-      });
-
-      const sortedKeys = Array.from(monthMap.keys()).sort();
-      sortedKeys.forEach((key) => {
-        const mEntries = monthMap.get(key) || [];
-        const [y, m] = key.split('-');
-        const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-        const mName = monthNames[parseInt(m, 10) - 1] || m;
-        const avgScore =
-          mEntries.reduce((acc, curr) => acc + (MOOD_MAP[curr.mood]?.score || 3), 0) / mEntries.length;
-
-        trendData.push({
-          label: `${mName} '${y.slice(2)}`,
-          score: Math.round(avgScore * 10) / 10,
-          count: mEntries.length,
+      if (entries.length > 0) {
+        const monthMap = new Map<string, MoodEntry[]>();
+        entries.forEach((e) => {
+          const key = e.date.substring(0, 7); // YYYY-MM
+          if (!monthMap.has(key)) {
+            monthMap.set(key, []);
+          }
+          monthMap.get(key)!.push(e);
         });
-      });
 
-      if (trendData.length === 0) {
-        trendData.push({ label: 'Total', score: 4.5, count: 0 });
+        const sortedKeys = Array.from(monthMap.keys()).sort();
+        sortedKeys.forEach((key) => {
+          const mEntries = monthMap.get(key) || [];
+          const [y, m] = key.split('-');
+          const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+          const mName = monthNames[parseInt(m, 10) - 1] || m;
+          const avgScore =
+            mEntries.reduce((acc, curr) => acc + (MOOD_MAP[curr.mood]?.score || 0), 0) / mEntries.length;
+
+          trendData.push({
+            label: `${mName} '${y.slice(2)}`,
+            score: Math.round(avgScore * 10) / 10,
+            count: mEntries.length,
+          });
+        });
       }
     }
 
     const totalLogs = filteredEntries.length;
     const totalScore = filteredEntries.reduce(
-      (sum, e) => sum + (MOOD_MAP[e.mood]?.score || 3),
+      (sum, e) => sum + (MOOD_MAP[e.mood]?.score || 0),
       0
     );
     const averageScore = totalLogs > 0 ? Math.round((totalScore / totalLogs) * 10) / 10 : 0;
 
     // Positivity rate: percentage of days with score >= 3.5
     const positiveCount = filteredEntries.filter(
-      (e) => (MOOD_MAP[e.mood]?.score || 3) >= 3.5
+      (e) => (MOOD_MAP[e.mood]?.score || 0) >= 3.5
     ).length;
     const positivityRate = totalLogs > 0 ? Math.round((positiveCount / totalLogs) * 100) : 0;
 
     // Dominant mood
     let dominantMood: MoodId | null = null;
-    let maxCount = -1;
+    let maxCount = 0;
     (Object.keys(distribution) as MoodId[]).forEach((m) => {
-      if (distribution[m] > maxCount && distribution[m] > 0) {
+      if (distribution[m] > maxCount) {
         maxCount = distribution[m];
         dominantMood = m;
       }
@@ -336,26 +305,28 @@ export const MoodService = {
 
     // Calculate current logging streak
     let currentStreak = 0;
-    const sortedDates = Array.from(new Set(entries.map((e) => e.date))).sort().reverse();
-    const todayStr = formatDate(now);
-    const yesterday = new Date(now);
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = formatDate(yesterday);
+    if (entries.length > 0) {
+      const sortedDates = Array.from(new Set(entries.map((e) => e.date))).sort().reverse();
+      const todayStr = formatDate(now);
+      const yesterday = new Date(now);
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = formatDate(yesterday);
 
-    let checkDate = sortedDates.includes(todayStr)
-      ? new Date(now)
-      : sortedDates.includes(yesterdayStr)
-      ? yesterday
-      : null;
+      let checkDate = sortedDates.includes(todayStr)
+        ? new Date(now)
+        : sortedDates.includes(yesterdayStr)
+        ? yesterday
+        : null;
 
-    if (checkDate) {
-      while (true) {
-        const dStr = formatDate(checkDate);
-        if (sortedDates.includes(dStr)) {
-          currentStreak++;
-          checkDate.setDate(checkDate.getDate() - 1);
-        } else {
-          break;
+      if (checkDate) {
+        while (true) {
+          const dStr = formatDate(checkDate);
+          if (sortedDates.includes(dStr)) {
+            currentStreak++;
+            checkDate.setDate(checkDate.getDate() - 1);
+          } else {
+            break;
+          }
         }
       }
     }
