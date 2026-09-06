@@ -45,7 +45,11 @@
           "photosPermission": "Hobi necesita acceso a tus fotos para subir la evidencia de tus retos diarios.",
           "cameraPermission": "Hobi necesita acceso a tu cámara para tomar la foto de tu reto diario."
         }
-      ]
+      ],
+      "expo-font",
+      "expo-image",
+      "expo-status-bar",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,

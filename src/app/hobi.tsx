@@ -165,7 +165,7 @@ export default function HobiScreen() {
     }
 
     setCreatingGroup(true);
-    const { error, groupId } = await HobiSocialService.createGroup(name, selectedFriendIds);
+    const { error } = await HobiSocialService.createGroup(name, selectedFriendIds);
     setCreatingGroup(false);
 
     if (error) {
@@ -216,7 +216,6 @@ export default function HobiScreen() {
 
   const acceptedFriends = friends.filter((f) => f.status === 'accepted');
   const incomingRequests = friends.filter((f) => f.is_incoming && f.status === 'pending');
-  const outgoingRequests = friends.filter((f) => f.is_outgoing && f.status === 'pending');
 
   return (
     <View style={styles.container}>

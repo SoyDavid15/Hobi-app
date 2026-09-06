@@ -9,12 +9,14 @@ import {
   useWindowDimensions,
   RefreshControl,
   Linking,
+  Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { useCallback, useState, useEffect, useRef } from 'react';
+import { useCallback, useState, useEffect, useRef, useMemo } from 'react';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import { openBrowserAsync, WebBrowserPresentationStyle } from 'expo-web-browser';
 
 import { ThemedText } from '@/components/themed-text';
@@ -24,21 +26,30 @@ import { ChallengeService, CompletedChallengeItem } from '@/services/challenges'
 import { calculateStreak } from '@/lib/streak';
 import { supabase } from '@/lib/supabase';
 import { useLanguage } from '@/context/LanguageContext';
+import { useAlert } from '@/context/AlertContext';
+
+type FilterPeriod = 'ALL' | 'AM' | 'PM';
 
 export default function ProfileScreen() {
   const router = useRouter();
   const { width, height } = useWindowDimensions();
   const { t } = useLanguage();
+  const { showAlert } = useAlert();
+
   const [challenges, setChallenges] = useState<CompletedChallengeItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedItem, setSelectedItem] = useState<CompletedChallengeItem | null>(null);
+  const [isPassportOpen, setIsPassportOpen] = useState(false);
+  const [activeFilter, setActiveFilter] = useState<FilterPeriod>('ALL');
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [username, setUsername] = useState<string | null>(null);
 
   const loadProfileData = useCallback(async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (session?.user) {
         if (session.user.email) {
           setUserEmail(session.user.email);
@@ -71,8 +82,34 @@ export default function ProfileScreen() {
     }
   }, [loadProfileData]);
 
-  // Racha de días consecutivos con al menos 1 reto completado (lógica en @/lib/streak)
-  const streakCount = calculateStreak(challenges.map((c) => c.challenge_date));
+  // Racha de días consecutivos
+  const streakCount = useMemo(
+    () => calculateStreak(challenges.map((c) => c.challenge_date)),
+    [challenges]
+  );
+
+  // Rango / Título del explorador según racha y retos
+  const explorerRank = useMemo(() => {
+    if (streakCount >= 14 || challenges.length >= 25) {
+      return { title: 'Leyenda Hobi 👑', level: 5, color: '#FFB300', badge: 'LEGEND' };
+    }
+    if (streakCount >= 7 || challenges.length >= 14) {
+      return { title: 'Guerrero de Hábitos ⚡', level: 4, color: '#FF5722', badge: 'MASTER' };
+    }
+    if (streakCount >= 4 || challenges.length >= 7) {
+      return { title: 'Constante Imparable 🔥', level: 3, color: '#E65100', badge: 'PRO' };
+    }
+    if (streakCount >= 1 || challenges.length >= 1) {
+      return { title: 'Explorador Activo 🌱', level: 2, color: '#2E7D32', badge: 'ACTIVE' };
+    }
+    return { title: 'Principiante Curioso 🐣', level: 1, color: '#6F4E37', badge: 'NOVICE' };
+  }, [streakCount, challenges.length]);
+
+  // Filtrado de galería
+  const filteredChallenges = useMemo(() => {
+    if (activeFilter === 'ALL') return challenges;
+    return challenges.filter((c) => c.period === activeFilter);
+  }, [challenges, activeFilter]);
 
   const handleDonate = async () => {
     const url = 'https://ko-fi.com/samuuu';
@@ -89,11 +126,49 @@ export default function ProfileScreen() {
     }
   };
 
-  const displayName = username || (userEmail ? userEmail.split('@')[0] : 'Hobi User');
+  const displayName = username || (userEmail ? userEmail.split('@')[0] : 'Explorador Hobi');
+
+  // Compartir tarjeta de perfil
+  const handleSharePassport = async () => {
+    try {
+      await Share.share({
+        message: `🔥 ¡Mira mi progreso en Hobi! Llevo una racha de ${streakCount} ${
+          streakCount === 1 ? 'día' : 'días'
+        } y ${challenges.length} retos superados. 🏆✨\n\n¿Aceptas el reto diario conmigo? Únete en https://hobi.app`,
+      });
+    } catch {
+      // ignore
+    }
+  };
+
+  // Compartir reto individual
+  const handleShareChallenge = async (item: CompletedChallengeItem) => {
+    try {
+      const periodName = item.period === 'PM' ? 'Tarde 🌙' : 'Mañana ☀️';
+      await Share.share({
+        message: `🎯 ¡Reto de Hobi completado (${item.challenge_date} - ${periodName})!\n\n"${item.challenge}"\n\n✨ Hecho con Hobi App • Construyendo mejores hábitos cada día.`,
+      });
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleCopyChallenge = async (item: CompletedChallengeItem) => {
+    await Clipboard.setStringAsync(
+      `🎯 Reto superado: "${item.challenge}" (${item.challenge_date}) #HobiApp`
+    );
+    showAlert({
+      title: '¡Copiado!',
+      message: 'Texto del reto copiado al portapapeles listo para compartir.',
+      type: 'success',
+    });
+  };
+
+  const isFitCharacter = streakCount >= 5;
 
   return (
     <View style={styles.container}>
-      {/* Círculo gigante café inferior (misma estética que Home) */}
+      {/* Círculo decorativo ambiental */}
       <View
         style={[
           styles.bottomCircle,
@@ -120,65 +195,113 @@ export default function ProfileScreen() {
           />
         }>
         <SafeAreaView style={styles.safeArea}>
-          {/* Cabecera superior con botones de navegación (Hobbies y Ajustes) */}
+          {/* Cabecera superior con botones de acción */}
           <View style={styles.topBar}>
             <Pressable
-              style={({ pressed }) => [styles.topIconButton, { opacity: pressed ? 0.7 : 1 }]}
+              style={({ pressed }) => [styles.topIconButton, { opacity: pressed ? 0.75 : 1 }]}
               onPress={() => router.push('/hobbies')}>
-              <Ionicons name="heart" size={18} color="#6F4E37" />
+              <Ionicons name="heart" size={16} color="#6F4E37" />
               <ThemedText style={styles.topIconText}>{t('hobbiesBtn')}</ThemedText>
             </Pressable>
 
-            <Pressable
-              style={({ pressed }) => [styles.hamburgerButton, { opacity: pressed ? 0.7 : 1 }]}
-              onPress={() => router.push('/settings')}>
-              <Ionicons name="settings-outline" size={20} color="#1F1F1F" />
-            </Pressable>
+            <View style={styles.topBarRight}>
+              <Pressable
+                style={({ pressed }) => [styles.passportButton, { opacity: pressed ? 0.85 : 1 }]}
+                onPress={() => setIsPassportOpen(true)}>
+                <Ionicons name="sparkles" size={15} color="#FFFFFF" />
+                <ThemedText style={styles.passportButtonText}>Tarjeta Social</ThemedText>
+              </Pressable>
+
+              <Pressable
+                style={({ pressed }) => [styles.hamburgerButton, { opacity: pressed ? 0.75 : 1 }]}
+                onPress={() => router.push('/settings')}>
+                <Ionicons name="settings-outline" size={19} color="#1F1F1F" />
+              </Pressable>
+            </View>
           </View>
 
-          {/* Tarjeta de Perfil / Avatar */}
+          {/* Tarjeta de Perfil Heroica y Estética */}
           <View style={styles.profileHeroCard}>
-            <View style={styles.outerRing}>
-              <View style={styles.innerCircle}>
-                <Ionicons name="person" size={42} color="#FFFFFF" />
+            <View style={styles.heroBackgroundAccent} />
+
+            <View style={styles.heroHeaderRow}>
+              {/* Avatar con Mascota Hobi Badge */}
+              <View style={styles.avatarContainer}>
+                <View style={styles.outerRing}>
+                  <View style={styles.innerCircle}>
+                    <Ionicons name="person" size={38} color="#FFFFFF" />
+                  </View>
+                </View>
+
+                {/* Mascota Hobi saliendo sutilmente del avatar */}
+                <Image
+                  source={
+                    isFitCharacter
+                      ? require('@/assets/images/hobiCharacterFit.png')
+                      : require('@/assets/images/hobiCharacter.png')
+                  }
+                  style={styles.mascotAvatarBadge}
+                  contentFit="contain"
+                />
+              </View>
+
+              <View style={styles.heroInfoColumn}>
+                <View style={styles.rankBadge}>
+                  <ThemedText style={styles.rankBadgeText}>{explorerRank.badge}</ThemedText>
+                  <ThemedText style={styles.rankTitleText}>{explorerRank.title}</ThemedText>
+                </View>
+
+                <ThemedText style={styles.userName}>{displayName}</ThemedText>
+                <ThemedText style={styles.userEmail}>
+                  {userEmail || 'explorador@hobi.app'}
+                </ThemedText>
               </View>
             </View>
-            <View style={styles.userInfo}>
-              <ThemedText style={styles.userName}>{displayName}</ThemedText>
-              <ThemedText style={styles.userEmail}>
-                {userEmail || 'explorador@hobi.app'}
+
+            {/* Micro banner motivacional para captura */}
+            <View style={styles.mottoPill}>
+              <Ionicons name="sparkles" size={13} color="#6F4E37" />
+              <ThemedText style={styles.mottoText}>
+                {streakCount >= 5
+                  ? '¡Modo Titán activado! Transformando constancia en poder 🔥'
+                  : 'Cada pequeño paso de hoy construye tu mejor versión 🌱'}
               </ThemedText>
             </View>
           </View>
 
-          {/* Tarjetas de Estadísticas (Racha y Monedas) */}
+          {/* Estadísticas Trío (Racha, Retos, Nivel) */}
           <View style={styles.statsContainer}>
-            <View style={styles.streakCard}>
-              <View style={styles.streakIconBox}>
-                <Ionicons name="flame" size={24} color="#FF5722" />
+            {/* Racha */}
+            <View style={[styles.statBox, styles.statBoxStreak]}>
+              <View style={styles.statIconBadgeStreak}>
+                <Ionicons name="flame" size={22} color="#FF5722" />
               </View>
-              <View>
-                <ThemedText style={styles.statLabel}>{t('streak')}</ThemedText>
-                <ThemedText style={styles.streakNumber}>
-                  {streakCount} {streakCount === 1 ? t('day') : t('days')}
-                </ThemedText>
-              </View>
+              <ThemedText style={styles.statMainNumber}>{streakCount}</ThemedText>
+              <ThemedText style={styles.statSubtitle}>
+                {streakCount === 1 ? t('day') : t('days')} de Racha
+              </ThemedText>
             </View>
 
-            <View style={styles.challengesCountCard}>
-              <View style={styles.challengesIconBox}>
-                <Ionicons name="wallet-outline" size={22} color="#6F4E37" />
+            {/* Retos Superados */}
+            <View style={[styles.statBox, styles.statBoxChallenges]}>
+              <View style={styles.statIconBadgeChallenges}>
+                <Ionicons name="trophy" size={20} color="#D97706" />
               </View>
-              <View>
-                <ThemedText style={styles.statLabel}>{t('coins')}</ThemedText>
-                <ThemedText style={styles.challengesNumber}>
-                  —
-                </ThemedText>
+              <ThemedText style={styles.statMainNumberChallenges}>{challenges.length}</ThemedText>
+              <ThemedText style={styles.statSubtitle}>Retos Superados</ThemedText>
+            </View>
+
+            {/* Nivel de Explorador */}
+            <View style={[styles.statBox, styles.statBoxLevel]}>
+              <View style={styles.statIconBadgeLevel}>
+                <Ionicons name="shield-checkmark" size={20} color="#6F4E37" />
               </View>
+              <ThemedText style={styles.statMainNumberLevel}>Nv. {explorerRank.level}</ThemedText>
+              <ThemedText style={styles.statSubtitle}>Constancia</ThemedText>
             </View>
           </View>
 
-          {/* Botón / Tarjeta de Donación (Ko-fi) */}
+          {/* Tarjeta de Donación Ko-fi Estilizada */}
           <Pressable
             style={({ pressed }) => [
               styles.donateCard,
@@ -186,46 +309,76 @@ export default function ProfileScreen() {
             ]}
             onPress={handleDonate}>
             <View style={styles.donateIconBox}>
-              <Ionicons name="cafe" size={22} color="#FFFFFF" />
+              <Ionicons name="cafe" size={20} color="#FFFFFF" />
             </View>
             <View style={styles.donateInfo}>
               <ThemedText style={styles.donateTitle}>{t('inviteCoffee')}</ThemedText>
               <ThemedText style={styles.donateSubtitle}>{t('supportKoFi')}</ThemedText>
             </View>
             <View style={styles.donateArrow}>
-              <Ionicons name="heart" size={16} color="#FF5722" />
-              <Ionicons name="chevron-forward" size={16} color="#6F4E37" />
+              <Ionicons name="heart" size={14} color="#FF5722" />
+              <Ionicons name="chevron-forward" size={14} color="#6F4E37" />
             </View>
           </Pressable>
 
-          {/* Sección de Galería */}
+          {/* Sección de Galería de Conquistas */}
           <View style={styles.gallerySection}>
-            <View style={styles.sectionHeader}>
-              <ThemedText style={styles.sectionTitle}>{t('completedChallengesTitle')}</ThemedText>
-              <ThemedText style={styles.sectionSubtitle}>
-                {challenges.length} {challenges.length === 1 ? t('memory') : t('memories')}
-              </ThemedText>
+            <View style={styles.sectionHeaderRow}>
+              <View>
+                <ThemedText style={styles.sectionTitle}>
+                  {t('completedChallengesTitle')} 📸
+                </ThemedText>
+                <ThemedText style={styles.sectionSubtitle}>
+                  {challenges.length} {challenges.length === 1 ? t('memory') : t('memories')}{' '}
+                  guardados
+                </ThemedText>
+              </View>
+
+              {/* Filtros de período */}
+              <View style={styles.filterPillsContainer}>
+                {(['ALL', 'AM', 'PM'] as FilterPeriod[]).map((f) => (
+                  <Pressable
+                    key={f}
+                    style={[
+                      styles.filterPill,
+                      activeFilter === f && styles.filterPillActive,
+                    ]}
+                    onPress={() => setActiveFilter(f)}>
+                    <ThemedText
+                      style={[
+                        styles.filterPillText,
+                        activeFilter === f && styles.filterPillTextActive,
+                      ]}>
+                      {f === 'ALL' ? 'Todos' : f === 'AM' ? '☀️ AM' : '🌙 PM'}
+                    </ThemedText>
+                  </Pressable>
+                ))}
+              </View>
             </View>
 
             {loading ? (
               <View style={styles.loadingBox}>
                 <ActivityIndicator size="large" color="#6F4E37" />
               </View>
-            ) : challenges.length === 0 ? (
+            ) : filteredChallenges.length === 0 ? (
               <View style={styles.emptyContainer}>
                 <View style={styles.emptyIconCircle}>
-                  <Ionicons name="camera-outline" size={36} color="#6F4E37" />
+                  <Ionicons name="camera-outline" size={34} color="#6F4E37" />
                 </View>
-                <ThemedText style={styles.emptyTitle}>{t('emptyGalleryTitle')}</ThemedText>
+                <ThemedText style={styles.emptyTitle}>
+                  {activeFilter === 'ALL' ? t('emptyGalleryTitle') : 'Sin fotos en este turno'}
+                </ThemedText>
                 <ThemedText style={styles.emptySubtitle}>
-                  {t('emptyGallerySubtitle')}
+                  {activeFilter === 'ALL'
+                    ? t('emptyGallerySubtitle')
+                    : 'Completa un reto en este horario para coleccionar tu recuerdo fotográfico.'}
                 </ThemedText>
               </View>
             ) : (
               <View style={styles.galleryGrid}>
-                {challenges.map((item) => (
+                {filteredChallenges.map((item) => (
                   <Pressable
-                    key={item.id || item.challenge_date}
+                    key={item.id || `${item.challenge_date}-${item.period}`}
                     style={({ pressed }) => [
                       styles.photoCardWrapper,
                       { opacity: pressed ? 0.92 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] },
@@ -237,10 +390,17 @@ export default function ProfileScreen() {
                       contentFit="cover"
                       transition={250}
                     />
+
+                    {/* Gradient Overlay & Glass Chip */}
                     <View style={styles.photoOverlay}>
                       <View style={styles.photoDateBadge}>
+                        <Ionicons
+                          name={item.period === 'PM' ? 'moon' : 'sunny'}
+                          size={11}
+                          color="#FFD166"
+                        />
                         <ThemedText style={styles.photoDateText}>
-                          {item.challenge_date} • {item.period === 'PM' ? '🌙 Tarde' : '☀️ Mañana'}
+                          {item.challenge_date}
                         </ThemedText>
                       </View>
                     </View>
@@ -254,7 +414,9 @@ export default function ProfileScreen() {
         </SafeAreaView>
       </ScrollView>
 
-      {/* Modal de Detalle Espectacular */}
+      {/* ========================================================================= */}
+      {/* MODAL 1: HISTORIA DE RETO COMPLETO (STORY / POLAROID SCREENSHOT READY)   */}
+      {/* ========================================================================= */}
       <Modal
         visible={Boolean(selectedItem)}
         transparent={true}
@@ -263,32 +425,176 @@ export default function ProfileScreen() {
         <View style={styles.modalOverlay}>
           <Pressable style={styles.modalBackdrop} onPress={() => setSelectedItem(null)} />
           {selectedItem && (
-            <View style={styles.modalContent}>
-              <Pressable style={styles.modalCloseButton} onPress={() => setSelectedItem(null)}>
-                <Ionicons name="close" size={22} color="#1F1F1F" />
+            <View style={styles.storyCardContainer}>
+              {/* Botón de cierre */}
+              <Pressable
+                style={styles.modalCloseButton}
+                onPress={() => setSelectedItem(null)}>
+                <Ionicons name="close" size={20} color="#1F1F1F" />
               </Pressable>
 
-              <Image
-                source={{ uri: selectedItem.photo_url }}
-                style={styles.modalImage}
-                contentFit="cover"
-              />
-
-              <View style={styles.modalInfo}>
-                <View style={styles.modalTag}>
-                  <Ionicons name="calendar" size={14} color="#6F4E37" />
-                  <ThemedText style={styles.modalTagText}>
-                    {selectedItem.challenge_date} • {selectedItem.period === 'PM' ? 'Turno Tarde' : 'Turno Mañana'}
-                  </ThemedText>
+              {/* Header de la Tarjeta Story */}
+              <View style={styles.storyHeader}>
+                <View style={styles.storyBrandRow}>
+                  <View style={styles.storyBrandIcon}>
+                    <Ionicons name="flame" size={16} color="#FFFFFF" />
+                  </View>
+                  <View>
+                    <ThemedText style={styles.storyBrandName}>HOBI CHALLENGE</ThemedText>
+                    <ThemedText style={styles.storyUserTag}>@{displayName}</ThemedText>
+                  </View>
                 </View>
 
-                <ThemedText style={styles.modalChallengeTitle}>Reto superado:</ThemedText>
-                <ThemedText style={styles.modalChallengeText}>
+                <View style={styles.storyVerifiedBadge}>
+                  <Ionicons name="checkmark-circle" size={14} color="#10B981" />
+                  <ThemedText style={styles.storyVerifiedText}>Verificado</ThemedText>
+                </View>
+              </View>
+
+              {/* Imagen Central con Aspecto Fotográfico Premium */}
+              <View style={styles.storyImageFrame}>
+                <Image
+                  source={{ uri: selectedItem.photo_url }}
+                  style={styles.storyMainImage}
+                  contentFit="cover"
+                />
+                <View style={styles.storyImageTag}>
+                  <ThemedText style={styles.storyImageTagText}>
+                    {selectedItem.period === 'PM' ? '🌙 Turno Tarde' : '☀️ Turno Mañana'} •{' '}
+                    {selectedItem.challenge_date}
+                  </ThemedText>
+                </View>
+              </View>
+
+              {/* Bloque de Reto Superado */}
+              <View style={styles.storyPromptBox}>
+                <ThemedText style={styles.storyQuoteIcon}>“</ThemedText>
+                <ThemedText style={styles.storyChallengeText}>
                   {selectedItem.challenge}
                 </ThemedText>
               </View>
+
+              {/* Barra de Acciones para Redes Sociales */}
+              <View style={styles.storyActionsRow}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.storyShareBtn,
+                    { opacity: pressed ? 0.85 : 1 },
+                  ]}
+                  onPress={() => handleShareChallenge(selectedItem)}>
+                  <Ionicons name="share-social" size={17} color="#FFFFFF" />
+                  <ThemedText style={styles.storyShareBtnText}>Compartir</ThemedText>
+                </Pressable>
+
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.storyCopyBtn,
+                    { opacity: pressed ? 0.85 : 1 },
+                  ]}
+                  onPress={() => handleCopyChallenge(selectedItem)}>
+                  <Ionicons name="copy-outline" size={17} color="#6F4E37" />
+                  <ThemedText style={styles.storyCopyBtnText}>Copiar</ThemedText>
+                </Pressable>
+              </View>
+
+              <ThemedText style={styles.storyWatermark}>
+                ✨ Retos diarios que construyen tu mejor versión • hobi.app
+              </ThemedText>
             </View>
           )}
+        </View>
+      </Modal>
+
+      {/* ========================================================================= */}
+      {/* MODAL 2: TARJETA DE EXPLORADOR HOBI (PASSPORT DE PERFIL PARA STORIES)     */}
+      {/* ========================================================================= */}
+      <Modal
+        visible={isPassportOpen}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setIsPassportOpen(false)}>
+        <View style={styles.modalOverlay}>
+          <Pressable style={styles.modalBackdrop} onPress={() => setIsPassportOpen(false)} />
+          <View style={styles.passportCard}>
+            {/* Cierre */}
+            <Pressable
+              style={styles.modalCloseButton}
+              onPress={() => setIsPassportOpen(false)}>
+              <Ionicons name="close" size={20} color="#1F1F1F" />
+            </Pressable>
+
+            {/* Cabecera Passport */}
+            <View style={styles.passportHeader}>
+              <View style={styles.passportSeal}>
+                <Ionicons name="sparkles" size={16} color="#FFD166" />
+                <ThemedText style={styles.passportSealText}>PASAPORTE HOBI</ThemedText>
+              </View>
+              <ThemedText style={styles.passportIdText}>ID: {displayName.toUpperCase()}</ThemedText>
+            </View>
+
+            {/* Avatar Central Hero con Mascota */}
+            <View style={styles.passportProfileSection}>
+              <View style={styles.passportAvatarWrapper}>
+                <View style={styles.passportAvatarCircle}>
+                  <Ionicons name="person" size={44} color="#FFFFFF" />
+                </View>
+                <Image
+                  source={
+                    isFitCharacter
+                      ? require('@/assets/images/hobiCharacterFit.png')
+                      : require('@/assets/images/hobiCharacter.png')
+                  }
+                  style={styles.passportMascotImg}
+                  contentFit="contain"
+                />
+              </View>
+
+              <ThemedText style={styles.passportName}>{displayName}</ThemedText>
+              <View style={styles.passportRankPill}>
+                <ThemedText style={styles.passportRankText}>{explorerRank.title}</ThemedText>
+              </View>
+            </View>
+
+            {/* Cuadrícula de Conquistas */}
+            <View style={styles.passportStatsGrid}>
+              <View style={styles.passportStatCell}>
+                <ThemedText style={styles.passportStatVal}>🔥 {streakCount}</ThemedText>
+                <ThemedText style={styles.passportStatLbl}>Días de Racha</ThemedText>
+              </View>
+              <View style={styles.passportStatCell}>
+                <ThemedText style={styles.passportStatVal}>🎯 {challenges.length}</ThemedText>
+                <ThemedText style={styles.passportStatLbl}>Retos Hechos</ThemedText>
+              </View>
+              <View style={styles.passportStatCell}>
+                <ThemedText style={styles.passportStatVal}>⭐ Nivel {explorerRank.level}</ThemedText>
+                <ThemedText style={styles.passportStatLbl}>Constancia</ThemedText>
+              </View>
+            </View>
+
+            {/* Cita de Inspiración */}
+            <View style={styles.passportQuoteBox}>
+              <ThemedText style={styles.passportQuoteText}>
+                “No se trata de ser perfecto, se trata de presentarse cada día.”
+              </ThemedText>
+            </View>
+
+            {/* Botón de Compartir */}
+            <Pressable
+              style={({ pressed }) => [
+                styles.passportShareButton,
+                { opacity: pressed ? 0.9 : 1 },
+              ]}
+              onPress={handleSharePassport}>
+              <Ionicons name="share-social" size={18} color="#FFFFFF" />
+              <ThemedText style={styles.passportShareButtonText}>
+                Compartir en Redes Sociales
+              </ThemedText>
+            </Pressable>
+
+            <ThemedText style={styles.passportFooterBrand}>
+              Hobi App • Tu compañero diario de hábitos
+            </ThemedText>
+          </View>
         </View>
       </Modal>
     </View>
@@ -306,7 +612,7 @@ const styles = StyleSheet.create({
     bottom: -60,
     backgroundColor: '#6F4E37',
     zIndex: 0,
-    opacity: 0.12,
+    opacity: 0.1,
   },
   scrollView: {
     flex: 1,
@@ -323,7 +629,7 @@ const styles = StyleSheet.create({
     maxWidth: MaxContentWidth,
     paddingHorizontal: Spacing.four,
     alignItems: 'stretch',
-    gap: Spacing.four,
+    gap: Spacing.three + 2,
   },
   topBar: {
     flexDirection: 'row',
@@ -331,13 +637,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingTop: Spacing.two,
   },
+  topBarRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
   topIconButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.half + 2,
+    gap: 6,
     backgroundColor: '#F5F2ED',
     paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
+    paddingVertical: Spacing.two - 1,
     borderRadius: BorderRadius.full,
     borderWidth: 1,
     borderColor: '#EAE6E1',
@@ -347,9 +658,29 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#6F4E37',
   },
+  passportButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#6F4E37',
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two - 1,
+    borderRadius: BorderRadius.full,
+    shadowColor: '#6F4E37',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
+    elevation: 3,
+  },
+  passportButtonText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.2,
+  },
   hamburgerButton: {
-    width: 40,
-    height: 40,
+    width: 38,
+    height: 38,
     borderRadius: BorderRadius.full,
     backgroundColor: '#F5F2ED',
     alignItems: 'center',
@@ -358,131 +689,215 @@ const styles = StyleSheet.create({
     borderColor: '#EAE6E1',
   },
   profileHeroCard: {
-    backgroundColor: '#F7F6F3',
+    backgroundColor: '#FAF8F5',
     borderRadius: BorderRadius.large,
     padding: Spacing.four,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.two,
-    borderWidth: 1,
-    borderColor: '#EAE6E1',
-    marginTop: Spacing.one,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
+    gap: Spacing.three,
+    borderWidth: 1.5,
+    borderColor: '#EFEBE6',
+    shadowColor: '#6F4E37',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.07,
+    shadowRadius: 14,
     elevation: 3,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  heroBackgroundAccent: {
+    position: 'absolute',
+    top: -40,
+    right: -40,
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: 'rgba(111, 78, 55, 0.05)',
+  },
+  heroHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+  },
+  avatarContainer: {
+    position: 'relative',
+    width: 86,
+    height: 86,
   },
   outerRing: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: 86,
+    height: 86,
+    borderRadius: 43,
     backgroundColor: '#EAE6E1',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
   },
   innerCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     backgroundColor: '#6F4E37',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  userInfo: {
+  mascotAvatarBadge: {
+    position: 'absolute',
+    bottom: -6,
+    right: -8,
+    width: 44,
+    height: 44,
+    zIndex: 5,
+  },
+  heroInfoColumn: {
+    flex: 1,
+    gap: 3,
+  },
+  rankBadge: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
+    gap: 6,
+    backgroundColor: '#F0EBE3',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: BorderRadius.full,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#E5DED4',
+  },
+  rankBadgeText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#6F4E37',
+    letterSpacing: 0.6,
+  },
+  rankTitleText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#3B2314',
   },
   userName: {
-    fontSize: 22,
+    fontSize: 21,
     fontWeight: '800',
     color: '#1F1F1F',
-    letterSpacing: -0.5,
+    letterSpacing: -0.4,
   },
   userEmail: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#8E8E93',
     fontWeight: '500',
   },
+  mottoPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two - 1,
+    borderRadius: BorderRadius.medium,
+    borderWidth: 1,
+    borderColor: '#EFEBE6',
+  },
+  mottoText: {
+    fontSize: 12,
+    color: '#6F4E37',
+    fontWeight: '600',
+    flex: 1,
+  },
   statsContainer: {
     flexDirection: 'row',
-    gap: Spacing.three,
+    gap: Spacing.two + 2,
   },
-  streakCard: {
+  statBox: {
     flex: 1,
-    flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFC5AD',
+    paddingVertical: Spacing.three,
+    paddingHorizontal: Spacing.two,
     borderRadius: BorderRadius.medium,
-    padding: Spacing.three,
-    gap: Spacing.two,
-    shadowColor: '#FF5722',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  streakIconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.7)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  challengesCountCard: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F5F2ED',
-    borderRadius: BorderRadius.medium,
-    padding: Spacing.three,
-    gap: Spacing.two,
     borderWidth: 1,
-    borderColor: '#EAE6E1',
+    gap: 4,
   },
-  challengesIconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#FFFFFF',
+  statBoxStreak: {
+    backgroundColor: '#FFF2EC',
+    borderColor: '#FFD4C2',
+  },
+  statBoxChallenges: {
+    backgroundColor: '#FEF9EE',
+    borderColor: '#FDE6B0',
+  },
+  statBoxLevel: {
+    backgroundColor: '#F7F5F2',
+    borderColor: '#EAE5DE',
+  },
+  statIconBadgeStreak: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FFE2D6',
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 2,
   },
-  statLabel: {
-    fontSize: 12,
-    color: '#6B655E',
-    fontWeight: '600',
+  statIconBadgeChallenges: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FEEFCB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 2,
   },
-  streakNumber: {
+  statIconBadgeLevel: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#EAE4DC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 2,
+  },
+  statMainNumber: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#FF5722',
+    letterSpacing: -0.5,
+  },
+  statMainNumberChallenges: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#D97706',
+    letterSpacing: -0.5,
+  },
+  statMainNumberLevel: {
     fontSize: 18,
-    fontWeight: '800',
-    color: '#1F1F1F',
-  },
-  challengesNumber: {
-    fontSize: 18,
-    fontWeight: '800',
+    fontWeight: '900',
     color: '#6F4E37',
+    letterSpacing: -0.5,
+  },
+  statSubtitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#7C746C',
+    textAlign: 'center',
   },
   donateCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF5F0',
+    backgroundColor: '#FFF9F5',
     borderRadius: BorderRadius.medium,
-    padding: Spacing.three + 2,
+    padding: Spacing.three,
     borderWidth: 1.5,
-    borderColor: '#FFD8CC',
+    borderColor: '#FFE3D6',
     gap: Spacing.three,
     shadowColor: '#FF5722',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
     shadowRadius: 6,
     elevation: 2,
   },
   donateIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: '#FF5722',
     alignItems: 'center',
     justifyContent: 'center',
@@ -492,44 +907,78 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   donateTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '800',
     color: '#1F1F1F',
   },
   donateSubtitle: {
     fontSize: 12,
     color: '#8E8E93',
-    fontWeight: '600',
+    fontWeight: '500',
   },
   donateArrow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: Spacing.two,
-    paddingVertical: Spacing.one,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: BorderRadius.full,
     borderWidth: 1,
-    borderColor: '#FFD8CC',
+    borderColor: '#FFE3D6',
   },
   gallerySection: {
     gap: Spacing.three,
     marginTop: Spacing.one,
   },
-  sectionHeader: {
+  sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: Spacing.two,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '800',
     color: '#1F1F1F',
+    letterSpacing: -0.3,
   },
   sectionSubtitle: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#8E8E93',
     fontWeight: '600',
+    marginTop: 1,
+  },
+  filterPillsContainer: {
+    flexDirection: 'row',
+    gap: 4,
+    backgroundColor: '#F5F2ED',
+    padding: 3,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    borderColor: '#EAE6E1',
+  },
+  filterPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: BorderRadius.full,
+  },
+  filterPillActive: {
+    backgroundColor: '#6F4E37',
+    shadowColor: '#6F4E37',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  filterPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#7A736B',
+  },
+  filterPillTextActive: {
+    color: '#FFFFFF',
   },
   loadingBox: {
     paddingVertical: Spacing.six,
@@ -541,32 +990,33 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: Spacing.five,
     paddingHorizontal: Spacing.four,
-    backgroundColor: '#F9F9FB',
+    backgroundColor: '#FAF8F5',
     borderRadius: BorderRadius.medium,
     borderWidth: 1,
-    borderColor: '#EAE6E1',
+    borderColor: '#EFEBE6',
     gap: Spacing.two,
   },
   emptyIconCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#F5F2ED',
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#F0EBE3',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: Spacing.half,
+    marginBottom: 4,
   },
   emptyTitle: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 15,
+    fontWeight: '800',
     color: '#1F1F1F',
     textAlign: 'center',
   },
   emptySubtitle: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#8E8E93',
     textAlign: 'center',
-    lineHeight: 19,
+    lineHeight: 18,
+    maxWidth: 280,
   },
   galleryGrid: {
     flexDirection: 'row',
@@ -576,16 +1026,18 @@ const styles = StyleSheet.create({
   },
   photoCardWrapper: {
     width: '48%',
-    height: 180,
-    borderRadius: BorderRadius.medium,
+    height: 190,
+    borderRadius: BorderRadius.large,
     overflow: 'hidden',
-    backgroundColor: '#E2E2E2',
+    backgroundColor: '#E8E5E1',
     position: 'relative',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
-    shadowRadius: 6,
+    shadowRadius: 8,
     elevation: 3,
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
   },
   photoCardImage: {
     width: '100%',
@@ -595,13 +1047,16 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     justifyContent: 'flex-end',
     padding: Spacing.two,
-    backgroundColor: 'rgba(0,0,0,0.15)',
+    backgroundColor: 'rgba(0,0,0,0.18)',
   },
   photoDateBadge: {
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(15, 15, 15, 0.78)',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: BorderRadius.small,
+    borderRadius: BorderRadius.full,
     alignSelf: 'flex-start',
   },
   photoDateText: {
@@ -609,9 +1064,13 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
   },
+
+  /* ========================================================================= */
+  /* ESTILOS DE MODAL / STORY / POLAROID                                        */
+  /* ========================================================================= */
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: Spacing.four,
@@ -619,70 +1078,334 @@ const styles = StyleSheet.create({
   modalBackdrop: {
     ...StyleSheet.absoluteFill,
   },
-  modalContent: {
+  storyCardContainer: {
     width: '100%',
-    maxWidth: 380,
+    maxWidth: 370,
     backgroundColor: '#FFFFFF',
     borderRadius: BorderRadius.large,
-    overflow: 'hidden',
-    zIndex: 10,
+    padding: Spacing.three + 2,
+    gap: Spacing.three,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.35,
+    shadowRadius: 24,
+    elevation: 12,
+    position: 'relative',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   modalCloseButton: {
     position: 'absolute',
     top: 12,
     right: 12,
-    zIndex: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    zIndex: 30,
+    backgroundColor: '#F5F2ED',
     borderRadius: 20,
-    width: 38,
-    height: 38,
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#EAE6E1',
   },
-  modalImage: {
-    width: '100%',
-    height: 280,
-    backgroundColor: '#E0E0E0',
-  },
-  modalInfo: {
-    padding: Spacing.four,
-    gap: Spacing.two,
-  },
-  modalTag: {
+  storyHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingRight: 40,
+  },
+  storyBrandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  storyBrandIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#6F4E37',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  storyBrandName: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#6F4E37',
+    letterSpacing: 0.8,
+  },
+  storyUserTag: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1F1F1F',
+  },
+  storyVerifiedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  storyVerifiedText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#065F46',
+  },
+  storyImageFrame: {
+    width: '100%',
+    height: 290,
+    borderRadius: BorderRadius.medium,
+    overflow: 'hidden',
+    position: 'relative',
+    backgroundColor: '#EFEFEF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+  },
+  storyMainImage: {
+    width: '100%',
+    height: '100%',
+  },
+  storyImageTag: {
+    position: 'absolute',
+    bottom: 10,
+    left: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.full,
+  },
+  storyImageTagText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  storyPromptBox: {
+    backgroundColor: '#FAF8F5',
+    borderRadius: BorderRadius.medium,
+    padding: Spacing.three,
+    borderWidth: 1,
+    borderColor: '#EFEBE6',
+    position: 'relative',
+  },
+  storyQuoteIcon: {
+    position: 'absolute',
+    top: -4,
+    left: 8,
+    fontSize: 24,
+    color: '#6F4E37',
+    fontWeight: '900',
+    opacity: 0.3,
+  },
+  storyChallengeText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#2D1B13',
+    lineHeight: 20,
+    paddingLeft: 12,
+  },
+  storyActionsRow: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+  },
+  storyShareBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#6F4E37',
+    paddingVertical: Spacing.two + 3,
+    borderRadius: BorderRadius.medium,
+    shadowColor: '#6F4E37',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  storyShareBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  storyCopyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
     backgroundColor: '#F5F2ED',
     paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.half + 2,
-    borderRadius: BorderRadius.full,
-    alignSelf: 'flex-start',
+    paddingVertical: Spacing.two + 3,
+    borderRadius: BorderRadius.medium,
+    borderWidth: 1,
+    borderColor: '#EAE6E1',
   },
-  modalTagText: {
-    fontSize: 12,
-    fontWeight: '700',
+  storyCopyBtnText: {
     color: '#6F4E37',
-  },
-  modalChallengeTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#8E8E93',
-    marginTop: 2,
-  },
-  modalChallengeText: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '700',
-    color: '#1F1F1F',
-    lineHeight: 22,
+  },
+  storyWatermark: {
+    fontSize: 10,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+
+  /* ========================================================================= */
+  /* ESTILOS DE PASAPORTE SOCIAL (MODAL 2)                                     */
+  /* ========================================================================= */
+  passportCard: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: '#26160F',
+    borderRadius: BorderRadius.large,
+    padding: Spacing.four,
+    gap: Spacing.three,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.5,
+    shadowRadius: 30,
+    elevation: 16,
+    position: 'relative',
+    borderWidth: 1.5,
+    borderColor: '#6F4E37',
+  },
+  passportHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingRight: 40,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+    paddingBottom: Spacing.two,
+  },
+  passportSeal: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  passportSealText: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#FFD166',
+    letterSpacing: 1,
+  },
+  passportIdText: {
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontWeight: '700',
+  },
+  passportProfileSection: {
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: Spacing.two,
+  },
+  passportAvatarWrapper: {
+    position: 'relative',
+    width: 90,
+    height: 90,
+  },
+  passportAvatarCircle: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: '#6F4E37',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: '#FFD166',
+  },
+  passportMascotImg: {
+    position: 'absolute',
+    bottom: -6,
+    right: -10,
+    width: 48,
+    height: 48,
+  },
+  passportName: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    letterSpacing: -0.3,
+  },
+  passportRankPill: {
+    backgroundColor: 'rgba(255, 209, 102, 0.15)',
+    paddingHorizontal: Spacing.three,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 209, 102, 0.4)',
+  },
+  passportRankText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FFD166',
+  },
+  passportStatsGrid: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderRadius: BorderRadius.medium,
+    paddingVertical: Spacing.three,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  passportStatCell: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 2,
+  },
+  passportStatVal: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#FFFFFF',
+  },
+  passportStatLbl: {
+    fontSize: 10,
+    color: 'rgba(255, 255, 255, 0.65)',
+    fontWeight: '700',
+  },
+  passportQuoteBox: {
+    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+    borderRadius: BorderRadius.medium,
+    padding: Spacing.two + 2,
+    borderLeftWidth: 3,
+    borderLeftColor: '#FF5722',
+  },
+  passportQuoteText: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.85)',
+    fontStyle: 'italic',
+    lineHeight: 17,
+  },
+  passportShareButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#FF5722',
+    paddingVertical: Spacing.three,
+    borderRadius: BorderRadius.medium,
+    shadowColor: '#FF5722',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  passportShareButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '900',
+    letterSpacing: 0.2,
+  },
+  passportFooterBrand: {
+    fontSize: 10,
+    color: 'rgba(255, 255, 255, 0.4)',
+    textAlign: 'center',
+    fontWeight: '600',
   },
 });
