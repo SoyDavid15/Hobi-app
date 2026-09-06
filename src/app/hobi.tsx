@@ -20,6 +20,11 @@ import { ThemedText } from '@/components/themed-text';
 import { WebBadge } from '@/components/web-badge';
 import { MaxContentWidth, Spacing, BorderRadius } from '@/constants/theme';
 import { HobiSocialService } from '@/services/hobi';
+import { MoodService } from '@/services/mood';
+import { MoodEntry, MoodId, MoodStats, TimeRange } from '@/types/mood';
+import { MoodSelector } from '@/components/mood-selector';
+import { MoodChart } from '@/components/mood-chart';
+import { MoodGraphModal } from '@/components/mood-graph-modal';
 import { useAlert } from '@/context/AlertContext';
 
 export default function HobiScreen() {
@@ -27,9 +32,25 @@ export default function HobiScreen() {
   const { width, height } = useWindowDimensions();
   const { showAlert } = useAlert();
 
-  const [activeTab, setActiveTab] = useState<'friends' | 'battles'>('friends');
+  // Active Main Tab
+  const [activeTab, setActiveTab] = useState<'mood' | 'friends' | 'battles'>('mood');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Mood State
+  const [todayMood, setTodayMood] = useState<MoodEntry | null>(null);
+  const [moodEntries, setMoodEntries] = useState<MoodEntry[]>([]);
+  const [selectedRange, setSelectedRange] = useState<TimeRange>('week');
+  const [moodStats, setMoodStats] = useState<MoodStats>({
+    totalLogs: 0,
+    averageScore: 0,
+    positivityRate: 0,
+    dominantMood: null,
+    currentStreak: 0,
+    distribution: { rad: 0, good: 0, neutral: 0, tired: 0, sad: 0, stressed: 0 },
+    trendData: [],
+  });
+  const [isGraphModalOpen, setIsGraphModalOpen] = useState(false);
 
   // Profile & Friends State
   const [profile, setProfile] = useState<any>(null);
@@ -46,22 +67,30 @@ export default function HobiScreen() {
 
   const loadData = useCallback(async () => {
     try {
-      const [profileRes, friendsRes, groupsRes] = await Promise.all([
-        HobiSocialService.getProfile(),
-        HobiSocialService.getFriends(),
-        HobiSocialService.getGroups(),
-      ]);
+      const [profileRes, friendsRes, groupsRes, todayRes, allEntriesRes, statsRes] =
+        await Promise.all([
+          HobiSocialService.getProfile(),
+          HobiSocialService.getFriends(),
+          HobiSocialService.getGroups(),
+          MoodService.getTodayEntry(),
+          MoodService.getAllEntries(),
+          MoodService.getStats(selectedRange),
+        ]);
 
       if (profileRes.profile) setProfile(profileRes.profile);
       if (friendsRes.friends) setFriends(friendsRes.friends);
       if (groupsRes.groups) setGroups(groupsRes.groups);
+
+      setTodayMood(todayRes);
+      setMoodEntries(allEntriesRes);
+      setMoodStats(statsRes);
     } catch {
       // ignore
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [selectedRange]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -75,6 +104,36 @@ export default function HobiScreen() {
       loadData();
     }
   }, [loadData]);
+
+  // Reload stats when time range changes
+  const handleRangeChange = async (newRange: TimeRange) => {
+    setSelectedRange(newRange);
+    const updatedStats = await MoodService.getStats(newRange);
+    setMoodStats(updatedStats);
+  };
+
+  const handleSaveMood = async (mood: MoodId, note?: string, tags?: string[]) => {
+    try {
+      const saved = await MoodService.saveMood(mood, note, tags);
+      setTodayMood(saved);
+      const all = await MoodService.getAllEntries();
+      setMoodEntries(all);
+      const stats = await MoodService.getStats(selectedRange);
+      setMoodStats(stats);
+
+      showAlert({
+        title: '¡Estado Guardado! ✨',
+        message: 'Tu estado de ánimo de hoy ha sido registrado con éxito.',
+        type: 'success',
+      });
+    } catch {
+      showAlert({
+        title: 'Error',
+        message: 'No se pudo guardar tu estado de ánimo.',
+        type: 'error',
+      });
+    }
+  };
 
   const handleCopyCode = async () => {
     if (profile?.friend_code) {
@@ -246,31 +305,50 @@ export default function HobiScreen() {
           />
         }>
         <SafeAreaView style={styles.safeArea}>
-          {/* Cabecera superior */}
+          {/* Cabecera superior moderna */}
           <View style={styles.header}>
             <View>
-              <ThemedText style={styles.headerTitle}>Hobi Social</ThemedText>
-              <ThemedText style={styles.headerSubtitle}>Amigos y Batallas de Retos</ThemedText>
+              <ThemedText style={styles.headerTitle}>Hobi</ThemedText>
+              <ThemedText style={styles.headerSubtitle}>
+                Bienestar, Amigos & Batallas de Retos
+              </ThemedText>
             </View>
             <Pressable
-              style={({ pressed }) => [styles.backButton, { opacity: pressed ? 0.7 : 1 }]}
+              style={({ pressed }) => [styles.homeBtn, { opacity: pressed ? 0.7 : 1 }]}
               onPress={() => router.push('/')}>
               <Ionicons name="home" size={20} color="#6F4E37" />
             </Pressable>
           </View>
 
-          {/* Pestañas (Segmented Switch) */}
+          {/* Segmented Switch de 3 pestañas: Bienestar, Amigos, Batallas */}
           <View style={styles.tabSwitch}>
+            <Pressable
+              style={[styles.tabButton, activeTab === 'mood' && styles.tabButtonActive]}
+              onPress={() => setActiveTab('mood')}>
+              <Ionicons
+                name="happy"
+                size={17}
+                color={activeTab === 'mood' ? '#FFFFFF' : '#6F4E37'}
+              />
+              <ThemedText
+                style={[styles.tabButtonText, activeTab === 'mood' && styles.tabButtonTextActive]}>
+                Bienestar
+              </ThemedText>
+            </Pressable>
+
             <Pressable
               style={[styles.tabButton, activeTab === 'friends' && styles.tabButtonActive]}
               onPress={() => setActiveTab('friends')}>
               <Ionicons
                 name="people"
-                size={18}
+                size={17}
                 color={activeTab === 'friends' ? '#FFFFFF' : '#6F4E37'}
               />
               <ThemedText
-                style={[styles.tabButtonText, activeTab === 'friends' && styles.tabButtonTextActive]}>
+                style={[
+                  styles.tabButtonText,
+                  activeTab === 'friends' && styles.tabButtonTextActive,
+                ]}>
                 Amigos ({acceptedFriends.length})
               </ThemedText>
             </Pressable>
@@ -280,11 +358,14 @@ export default function HobiScreen() {
               onPress={() => setActiveTab('battles')}>
               <Ionicons
                 name="trophy"
-                size={18}
+                size={17}
                 color={activeTab === 'battles' ? '#FFFFFF' : '#6F4E37'}
               />
               <ThemedText
-                style={[styles.tabButtonText, activeTab === 'battles' && styles.tabButtonTextActive]}>
+                style={[
+                  styles.tabButtonText,
+                  activeTab === 'battles' && styles.tabButtonTextActive,
+                ]}>
                 Batallas ({groups.length})
               </ThemedText>
             </Pressable>
@@ -293,6 +374,33 @@ export default function HobiScreen() {
           {loading ? (
             <View style={styles.loadingBox}>
               <ActivityIndicator size="large" color="#6F4E37" />
+            </View>
+          ) : activeTab === 'mood' ? (
+            /* ================= BIENESTAR / ESTADOS DE ÁNIMO TAB ================= */
+            <View style={styles.sectionContainer}>
+              {/* Sección "¿Cómo te sientes hoy?" */}
+              <MoodSelector
+                todayEntry={todayMood}
+                onSaveMood={handleSaveMood}
+                onOpenGraph={() => setIsGraphModalOpen(true)}
+              />
+
+              {/* Gráfico y Estadísticas de Bienestar Integrado */}
+              <View style={styles.chartSectionHeader}>
+                <View style={styles.chartHeaderLeft}>
+                  <Ionicons name="analytics" size={18} color="#6F4E37" />
+                  <ThemedText style={styles.chartSectionTitle}>
+                    Evolución de Estado de Ánimo
+                  </ThemedText>
+                </View>
+              </View>
+
+              <MoodChart
+                stats={moodStats}
+                selectedRange={selectedRange}
+                onRangeChange={handleRangeChange}
+                entries={moodEntries}
+              />
             </View>
           ) : activeTab === 'friends' ? (
             /* ================= AMIGOS TAB ================= */
@@ -388,7 +496,9 @@ export default function HobiScreen() {
 
               {/* Lista de Amigos Aceptados */}
               <View style={styles.subSection}>
-                <ThemedText style={styles.subSectionTitle}>Mis Amigos ({acceptedFriends.length})</ThemedText>
+                <ThemedText style={styles.subSectionTitle}>
+                  Mis Amigos ({acceptedFriends.length})
+                </ThemedText>
                 {acceptedFriends.length === 0 ? (
                   <View style={styles.emptyBox}>
                     <Ionicons name="people-outline" size={32} color="#A0A0A5" />
@@ -431,7 +541,8 @@ export default function HobiScreen() {
               </Pressable>
 
               <ThemedText style={styles.battleRuleHint}>
-                ⚡ Regla: Cada miembro debe cumplir sus retos diarios. El que rompa su racha desde la creación del grupo queda eliminado. ¡El último en pie gana! 🏆
+                ⚡ Regla: Cada miembro debe cumplir sus retos diarios. El que rompa su racha desde la
+                creación del grupo queda eliminado. ¡El último en pie gana! 🏆
               </ThemedText>
 
               {groups.length === 0 ? (
@@ -597,6 +708,16 @@ export default function HobiScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Modal flotante de Gráfico de Bienestar */}
+      <MoodGraphModal
+        visible={isGraphModalOpen}
+        onClose={() => setIsGraphModalOpen(false)}
+        stats={moodStats}
+        selectedRange={selectedRange}
+        onRangeChange={handleRangeChange}
+        entries={moodEntries}
+      />
     </View>
   );
 }
@@ -638,7 +759,7 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.two,
   },
   headerTitle: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '800',
     color: '#1F1F1F',
     letterSpacing: -0.5,
@@ -648,7 +769,7 @@ const styles = StyleSheet.create({
     color: '#8E8E93',
     fontWeight: '600',
   },
-  backButton: {
+  homeBtn: {
     width: 40,
     height: 40,
     borderRadius: BorderRadius.full,
@@ -674,13 +795,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 10,
     borderRadius: BorderRadius.small,
-    gap: 6,
+    gap: 5,
   },
   tabButtonActive: {
     backgroundColor: '#6F4E37',
+    shadowColor: '#6F4E37',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    elevation: 2,
   },
   tabButtonText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     color: '#6F4E37',
   },
@@ -694,6 +820,22 @@ const styles = StyleSheet.create({
   },
   sectionContainer: {
     gap: Spacing.four,
+  },
+  chartSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: Spacing.one,
+  },
+  chartHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  chartSectionTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#1F1F1F',
   },
   myCodeCard: {
     backgroundColor: '#F7F6F3',
